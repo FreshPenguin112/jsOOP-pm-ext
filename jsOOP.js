@@ -1533,12 +1533,21 @@
     }
 
     _convertJwArrayToArgs(jwArrayObj) {
-      if (jwArrayObj instanceof jwArray.Type) {
-        return jwArrayObj.array.map(item => {
-          // Resolve any JSObject references in the array
-          return this._convertToNativeValue(item);
-        });
+      // If it's the jwArray.Type instance, unwrap its internal array
+      if (typeof jwArray !== 'undefined' && jwArrayObj instanceof jwArray.Type) {
+        return jwArrayObj.array.map(item => this._convertToNativeValue(item));
       }
+
+      // If a plain native array was passed somehow, handle that too
+      if (Array.isArray(jwArrayObj)) {
+        return jwArrayObj.map(item => this._convertToNativeValue(item));
+      }
+
+      // If it's an object-form (e.g. from other extensions) representing a jwArray, unwrap
+      if (jwArrayObj && typeof jwArrayObj === 'object' && jwArrayObj.customId === 'jwArray' && Array.isArray(jwArrayObj.array)) {
+        return jwArrayObj.array.map(item => this._convertToNativeValue(item));
+      }
+
       return [];
     }
 
@@ -1550,6 +1559,19 @@
     }
 
     _convertToNativeValue(value) {
+      // Unwrap known wrapper instances first so native values remain native.
+      try {
+        if (typeof jwArray !== 'undefined' && value instanceof jwArray.Type) {
+          return value.array;
+        }
+      } catch (e) { }
+
+      try {
+        if (vm && vm.dogeiscutObject && typeof vm.dogeiscutObject.Type !== 'undefined' && value instanceof vm.dogeiscutObject.Type) {
+          return value.object;
+        }
+      } catch (e) { }
+
       if (value && typeof value === 'object' && value.object && value.customId === 'dogeiscutObject') {
         return value.object;
       }
@@ -1558,7 +1580,7 @@
         return value.array;
       }
 
-      // Always resolve JSObject references
+      // Always resolve JSObject references and lookup markers
       return this._getActualValue(value);
     }
 
