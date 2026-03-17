@@ -1550,16 +1550,84 @@
     }
 
     _convertToNativeValue(value) {
-      if (value && typeof value === 'object' && value.map && value.customId === 'dogeiscutObject') {
-        return Object.fromEntries(value.map);
+      const self = this;
+      const seen = new WeakMap();
+
+      function convert(v) {
+        // Resolve JSObject wrappers and lookup markers first
+        if (v instanceof JSObject) return convert(v.value);
+        if (v && typeof v === 'object' && v._jsoopLookupMarker && v.lookupId) {
+          const actual = self._getFromLookupTable(v.lookupId);
+          if (actual instanceof JSObject) return convert(actual.value);
+          return actual;
+        }
+
+        // Primitives and functions
+        if (v === null || typeof v !== 'object') return v;
+
+        // Avoid cycles
+        if (seen.has(v)) return seen.get(v);
+
+        // dogeiscutObject: convert its map into a plain object (recursively)
+        if (v && typeof v === 'object' && v.customId === 'dogeiscutObject' && v.map) {
+          const out = {};
+          seen.set(v, out);
+          try {
+            if (v.map instanceof Map) {
+              for (const [k, val] of v.map.entries()) {
+                out[k] = convert(val);
+              }
+            } else if (Array.isArray(v.map)) {
+              for (const entry of v.map) {
+                if (Array.isArray(entry) && entry.length >= 2) {
+                  out[entry[0]] = convert(entry[1]);
+                }
+              }
+            } else if (typeof v.map === 'object') {
+              for (const k of Object.keys(v.map)) {
+                out[k] = convert(v.map[k]);
+              }
+            }
+          } catch (e) {
+            return Object.fromEntries(v.map);
+          }
+          return out;
+        }
+
+        // jwArray: convert to native array (recursively)
+        if (v && typeof v === 'object' && v.customId === 'jwArray' && v.array) {
+          const arrOut = [];
+          seen.set(v, arrOut);
+          for (let i = 0; i < v.array.length; i++) arrOut[i] = convert(v.array[i]);
+          return arrOut;
+        }
+
+        // Plain Array
+        if (Array.isArray(v)) {
+          const arr = [];
+          seen.set(v, arr);
+          for (let i = 0; i < v.length; i++) arr[i] = convert(v[i]);
+          return arr;
+        }
+
+        // Plain object: convert each own enumerable property
+        const out = {};
+        seen.set(v, out);
+        try {
+          for (const k of Object.keys(v)) {
+            out[k] = convert(v[k]);
+          }
+          return out;
+        } catch (e) {
+          return self._getActualValue(v);
+        }
       }
 
-      if (value && typeof value === 'object' && value.array && value.customId === 'jwArray') {
-        return value.array;
+      try {
+        return convert(value);
+      } catch (e) {
+        return this._getActualValue(value);
       }
-
-      // Always resolve JSObject references
-      return this._getActualValue(value);
     }
 
     _convertToSafeString(value) {
