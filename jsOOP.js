@@ -1559,8 +1559,8 @@
         if (v && typeof v === 'object' && v._jsoopLookupMarker && v.lookupId) {
           const actual = self._getFromLookupTable(v.lookupId);
           if (actual instanceof JSObject) return convert(actual.value);
-          // If lookup table has no entry, don't convert to null/undefined — return the marker
-          if (actual === undefined) return v;
+          // If lookup table has no entry (undefined or null), don't convert to null/undefined — return the marker
+          if (actual === undefined || actual === null) return v;
           return actual;
         }
 
@@ -1628,7 +1628,11 @@
       try {
         const res = convert(value);
         // Avoid returning null for non-null inputs unless input was actually null
-        if (res === null && value !== null) return value;
+        if (res === null && value !== null) {
+          // Try to resolve wrappers to their actual underlying value before falling back
+          const actual = this._getActualValue(value);
+          return (actual === null || actual === undefined) ? value : actual;
+        }
         return res;
       } catch (e) {
         return this._getActualValue(value);
