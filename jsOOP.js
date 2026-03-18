@@ -2391,10 +2391,15 @@
 
       try {
         const val = target[PROP];
-        if (DEBUG) console.dir({
-          action: 'getProp(result)',
-          val
-        });
+        if (DEBUG) console.dir({ action: 'getProp(result)', val });
+
+        // If the property is an object/function or a lookup/custom marker,
+        // return a JSObject wrapper so further get/set operations operate on
+        // the original object rather than on a converted plain copy.
+        if (val !== null && val !== undefined && (typeof val === 'object' || typeof val === 'function' || (val && typeof val === 'object' && (val._jsoopLookupMarker || val.customId)))) {
+          return this._wrapForOtherExtensions(JSObject.toType(val));
+        }
+
         return this._getActualValue(this._convertToNativeValue(val));
       } catch (err) {
         console.error('JS OOP Error in getProp:', err);
@@ -2466,7 +2471,7 @@
       });
       const resolved = this._resolveInstanceHolder(INSTANCE);
       const target = resolved.value;
-      const value = this._convertToNativeValue(VALUE);
+      const value = (VALUE instanceof JSObject || (VALUE && typeof VALUE === 'object' && (VALUE._jsoopLookupMarker || VALUE.customId))) ? VALUE : this._convertToNativeValue(VALUE);
 
       try {
         if (target && (typeof target === 'object' || typeof target === 'function')) {
@@ -2504,7 +2509,7 @@
       const resolved = this._resolveInstanceHolder(INSTANCE);
       const holder = resolved.holder;
       const target = resolved.value;
-      const value = this._convertToNativeValue(VALUE);
+      const value = (VALUE instanceof JSObject || (VALUE && typeof VALUE === 'object' && (VALUE._jsoopLookupMarker || VALUE.customId))) ? VALUE : this._convertToNativeValue(VALUE);
 
       try {
         // If this is a jwArray wrapper (the original object), write to its .array
@@ -2542,7 +2547,7 @@
       const resolved = this._resolveInstanceHolder(INSTANCE);
       const holder = resolved.holder;
       const target = resolved.value;
-      const value = this._convertToNativeValue(VALUE);
+      const value = (VALUE instanceof JSObject || (VALUE && typeof VALUE === 'object' && (VALUE._jsoopLookupMarker || VALUE.customId))) ? VALUE : this._convertToNativeValue(VALUE);
 
       try {
         // If this is a dogeiscutObject wrapper (has map), update its map entries
