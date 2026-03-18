@@ -686,22 +686,15 @@
 
     // NEW: Ensure we always resolve JSObject references before using them
     _resolveJSObject(obj) {
-      if (obj instanceof JSObject) return obj.value;
+      if (obj instanceof JSObject) {
+        return obj.value;
+      }
 
-      if (obj && typeof obj === 'object') {
-        const proto = Object.getPrototypeOf(obj);
-        // Only inspect plain objects (safe to read properties). Avoid host objects (Window, Node, etc.)
-        if (proto === Object.prototype || proto === null) {
-          try {
-            // Accessing properties on some host/cross-origin objects can throw.
-            if (obj._jsoopLookupMarker && obj.lookupId) {
-              const actualObject = this._getFromLookupTable(obj.lookupId);
-              if (actualObject instanceof JSObject) return actualObject.value;
-            }
-          } catch (e) {
-            // If reading properties throws (cross-origin host object), bail out safely.
-            return obj;
-          }
+      // Handle lookup table markers
+      if (obj && typeof obj === "object" && obj._jsoopLookupMarker && obj.lookupId) {
+        const actualObject = this._getFromLookupTable(obj.lookupId);
+        if (actualObject instanceof JSObject) {
+          return actualObject.value;
         }
       }
 
@@ -710,22 +703,15 @@
 
     // NEW: Get the actual value from any JSObject or marker
     _getActualValue(value) {
-      if (value instanceof JSObject) return value.value;
+      if (value instanceof JSObject) {
+        return value.value;
+      }
 
-      if (value && typeof value === 'object') {
-        const proto = Object.getPrototypeOf(value);
-        // Only read marker properties on plain objects (safe). Avoid host objects like Window.
-        if (proto === Object.prototype || proto === null) {
-          try {
-            // Accessing properties on some host/cross-origin objects can throw.
-            if (value._jsoopLookupMarker && value.lookupId) {
-              const actualObject = this._getFromLookupTable(value.lookupId);
-              if (actualObject instanceof JSObject) return actualObject.value;
-            }
-          } catch (e) {
-            // If reading properties throws (cross-origin host object), return the original value.
-            return value;
-          }
+      // Handle lookup table markers
+      if (value && typeof value === "object" && value._jsoopLookupMarker && value.lookupId) {
+        const actualObject = this._getFromLookupTable(value.lookupId);
+        if (actualObject instanceof JSObject) {
+          return actualObject.value;
         }
       }
 
@@ -1563,81 +1549,83 @@
       return result;
     }
 
-    _convertToNativeValue(value, seen) {
-      // Use a WeakSet to avoid infinite recursion for circular structures
-      if (!seen) seen = new WeakSet();
+    _convertToNativeValue(value) {
+      return this._convertToNativeValueRecursive(value, new WeakSet());
+    }
 
-      // Resolve any JSObject or lookup markers first
-      value = this._getActualValue(value);
+    _convertToNativeValueRecursive(value, seen) {
+      // Resolve JSObject wrappers and lookup markers first
+      if (value instanceof JSObject) value = value.value;
 
-      // If it's an object from a host (e.g., Window from another frame), avoid reading properties
-      if (value && typeof value === 'object') {
-        const proto = Object.getPrototypeOf(value);
-        const isArray = Array.isArray(value);
-        const isPlain = proto === Object.prototype || proto === null;
-        if (!isPlain && !isArray) {
-          // Host objects can throw when reading properties (cross-origin). Return as-is.
-          return value;
-        }
+      if (value && typeof value === 'object' && value._jsoopLookupMarker && value.lookupId) {
+        const actual = this._getFromLookupTable(value.lookupId);
+        if (actual instanceof JSObject) value = actual.value;
+        else value = actual;
       }
 
-      // If it's our dogeiscutObject representation, convert entries recursively
-      if (value && typeof value === 'object' && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) && value.map && value.customId === 'dogeiscutObject') {
-        const out = {};
+      // Primitives, functions, null/undefined pass through
+      if (value === null || value === undefined) return value;
+      const t = typeof value;
+      if (t !== 'object') return value;
+
+      // Avoid infinite recursion on circular references
+      try {
+        if (seen.has(value)) return value;
+        seen.add(value);
+      } catch (e) {
+        // If value isn't weak-set-able, just return it
+        return value;
+      }
+
+      // dogeiscutObject: value.map is expected to be entries for Object.fromEntries
+      if (value && value.customId === 'dogeiscutObject' && value.map) {
         try {
-          if (seen.has(value)) return '[Circular]';
-          seen.add(value);
+          const obj = {};
           for (const entry of value.map) {
-            if (Array.isArray(entry) && entry.length >= 2) {
-              const k = entry[0];
-              const v = entry[1];
-              out[k] = this._convertToNativeValue(v, seen);
-            }
+            if (!Array.isArray(entry) || entry.length < 2) continue;
+            const k = entry[0];
+            const v = entry[1];
+            obj[k] = this._convertToNativeValueRecursive(v, seen);
           }
+          return obj;
         } catch (e) {
           return Object.fromEntries(value.map);
         }
-        return out;
       }
 
-      // If it's our jwArray representation, convert items recursively
-      if (value && typeof value === 'object' && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) && value.array && value.customId === 'jwArray') {
-        try {
-          if (seen.has(value)) return '[Circular]';
-          seen.add(value);
-          return value.array.map(item => this._convertToNativeValue(item, seen));
-        } catch (e) {
-          return value.array;
-        }
+      // jwArray: value.array
+      if (value && value.customId === 'jwArray' && value.array) {
+        return value.array.map(item => this._convertToNativeValueRecursive(item, seen));
       }
 
-      // If it's a plain Array that might contain wrapped items, convert them
+      // Native Array
       if (Array.isArray(value)) {
-        if (seen.has(value)) return '[Circular]';
-        seen.add(value);
-        return value.map(item => this._convertToNativeValue(item, seen));
+        return value.map(item => this._convertToNativeValueRecursive(item, seen));
       }
 
-      // If it's a plain object, only recursively convert its own properties
-      if (value && typeof value === 'object') {
-        // At this point we've already excluded host objects; proceed safely
-        if (seen.has(value)) return '[Circular]';
-        seen.add(value);
+      // Map -> object
+      if (value instanceof Map) {
+        const obj = {};
+        for (const [k, v] of value.entries()) {
+          obj[k] = this._convertToNativeValueRecursive(v, seen);
+        }
+        return obj;
+      }
+
+      // Plain object: convert own enumerable props
+      try {
         const out = {};
-        let changed = false;
-        for (const k of Object.keys(value)) {
-          const v = value[k];
-          if (v && (typeof v === 'object' || v instanceof JSObject)) {
-            out[k] = this._convertToNativeValue(v, seen);
-            changed = true;
-          } else {
-            out[k] = v;
+        for (const key of Object.keys(value)) {
+          try {
+            out[key] = this._convertToNativeValueRecursive(value[key], seen);
+          } catch (e) {
+            out[key] = value[key];
           }
         }
-        return changed ? out : value;
+        return out;
+      } catch (e) {
+        return value;
       }
-
-      return value;
     }
 
     _convertToSafeString(value) {
