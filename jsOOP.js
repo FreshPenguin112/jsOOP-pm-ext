@@ -1612,31 +1612,40 @@
         return value.array.map(item => this._convertToNativeValueRecursive(item, seen));
       }
 
-      // Native Array
+      // Native Array: convert nested special values in place to preserve identity
       if (Array.isArray(value)) {
-        return value.map(item => this._convertToNativeValueRecursive(item, seen));
-      }
-
-      // Map -> object
-      if (value instanceof Map) {
-        const obj = {};
-        for (const [k, v] of value.entries()) {
-          obj[k] = this._convertToNativeValueRecursive(v, seen);
-        }
-        return obj;
-      }
-
-      // Plain object: convert own enumerable props
-      try {
-        const out = {};
-        for (const key of Object.keys(value)) {
+        for (let i = 0; i < value.length; i++) {
           try {
-            out[key] = this._convertToNativeValueRecursive(value[key], seen);
+            value[i] = this._convertToNativeValueRecursive(value[i], seen);
           } catch (e) {
-            out[key] = value[key];
+            // ignore
           }
         }
-        return out;
+        return value;
+      }
+
+      // Map: convert nested special values in place to preserve identity
+      if (value instanceof Map) {
+        for (const [k, v] of value.entries()) {
+          try {
+            value.set(k, this._convertToNativeValueRecursive(v, seen));
+          } catch (e) {
+            // ignore
+          }
+        }
+        return value;
+      }
+
+      // Plain object: convert nested special values in place
+      try {
+        for (const key of Object.keys(value)) {
+          try {
+            value[key] = this._convertToNativeValueRecursive(value[key], seen);
+          } catch (e) {
+            // ignore
+          }
+        }
+        return value;
       } catch (e) {
         return value;
       }
@@ -2387,22 +2396,20 @@
         PROP,
         INSTANCE
       });
-      const resolved = this._resolveInstanceHolder(INSTANCE);
-      const target = resolved.value; // underlying value to read from
+      const target = this._getActualValue(INSTANCE); // Resolve instance reference (avoid cloning via to-native conversion)
 
       try {
-        const val = target && (typeof target === 'object' || typeof target === 'function') ? target[PROP] : undefined;
+        const val = target[PROP];
         if (DEBUG) console.dir({ action: 'getProp(result)', val });
 
         // If the property is an object/function, return a lookup marker so
-        // nested get/set calls can resolve the same underlying object.
+        // nested get/set calls refer to the same underlying object.
         if (val !== null && val !== undefined && (typeof val === 'object' || typeof val === 'function')) {
           try {
             const jsobj = new JSObject(val);
-            // Store and return the lookup marker which survives serialization.
             return this._storeInLookupTable(jsobj);
           } catch (e) {
-            // Fallback to plain wrapper for non-serializables
+            // Fallback to wrapper
             return this._wrapForOtherExtensions(JSObject.toType(val));
           }
         }
