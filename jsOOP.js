@@ -1550,16 +1550,60 @@
     }
 
     _convertToNativeValue(value) {
+      // Resolve any JSObject or lookup markers first
+      value = this._getActualValue(value);
+
+      // If it's our dogeiscutObject representation, convert entries recursively
       if (value && typeof value === 'object' && value.map && value.customId === 'dogeiscutObject') {
-        return Object.fromEntries(value.map);
+        const out = {};
+        try {
+          for (const entry of value.map) {
+            // entry may be [key, val] or an object-like pair
+            if (Array.isArray(entry) && entry.length >= 2) {
+              const k = entry[0];
+              const v = entry[1];
+              out[k] = this._convertToNativeValue(v);
+            }
+          }
+        } catch (e) {
+          return Object.fromEntries(value.map);
+        }
+        return out;
       }
 
+      // If it's our jwArray representation, convert items recursively
       if (value && typeof value === 'object' && value.array && value.customId === 'jwArray') {
-        return value.array;
+        try {
+          return value.array.map(item => this._convertToNativeValue(item));
+        } catch (e) {
+          return value.array;
+        }
       }
 
-      // Always resolve JSObject references
-      return this._getActualValue(value);
+      // If it's a plain Array that might contain wrapped items, convert them
+      if (Array.isArray(value)) {
+        return value.map(item => this._convertToNativeValue(item));
+      }
+
+      // If it's a plain object, only recursively convert its own properties
+      if (value && typeof value === 'object') {
+        const out = {};
+        let changed = false;
+        for (const k of Object.keys(value)) {
+          const v = value[k];
+          // Only recurse into values that look like wrapped/custom types or arrays/objects
+          if (v && (typeof v === 'object' || v instanceof JSObject)) {
+            out[k] = this._convertToNativeValue(v);
+            changed = true;
+          } else {
+            out[k] = v;
+          }
+        }
+        // If we actually converted anything, return the converted object, otherwise return original
+        return changed ? out : value;
+      }
+
+      return value;
     }
 
     _convertToSafeString(value) {
