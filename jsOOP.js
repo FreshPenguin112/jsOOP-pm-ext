@@ -686,16 +686,25 @@
 
     // NEW: Ensure we always resolve JSObject references before using them
     _resolveJSObject(obj) {
-      if (obj instanceof JSObject) {
-        return obj.value;
-      }
-
-      // Handle lookup table markers
-      if (obj && typeof obj === "object" && obj._jsoopLookupMarker && obj.lookupId) {
-        const actualObject = this._getFromLookupTable(obj.lookupId);
-        if (actualObject instanceof JSObject) {
-          return actualObject.value;
+      try {
+        if (obj instanceof JSObject) {
+          return obj.value;
         }
+
+        // Handle lookup table markers
+        if (obj && typeof obj === "object") {
+          const marker = obj._jsoopLookupMarker;
+          const lid = obj.lookupId;
+          if (marker && lid) {
+            const actualObject = this._getFromLookupTable(lid);
+            if (actualObject instanceof JSObject) {
+              return actualObject.value;
+            }
+          }
+        }
+      } catch (e) {
+        // Could be cross-origin access — just return the original object
+        return obj;
       }
 
       return obj;
@@ -703,19 +712,37 @@
 
     // NEW: Get the actual value from any JSObject or marker
     _getActualValue(value) {
-      if (value instanceof JSObject) {
-        return value.value;
-      }
-
-      // Handle lookup table markers
-      if (value && typeof value === "object" && value._jsoopLookupMarker && value.lookupId) {
-        const actualObject = this._getFromLookupTable(value.lookupId);
-        if (actualObject instanceof JSObject) {
-          return actualObject.value;
+      try {
+        if (value instanceof JSObject) {
+          return value.value;
         }
+
+        // Handle lookup table markers
+        if (value && typeof value === "object") {
+          const marker = value._jsoopLookupMarker;
+          const lid = value.lookupId;
+          if (marker && lid) {
+            const actualObject = this._getFromLookupTable(lid);
+            if (actualObject instanceof JSObject) {
+              return actualObject.value;
+            }
+          }
+        }
+      } catch (e) {
+        // Cross-origin or other access error — return as-is
+        return value;
       }
 
       return value;
+    }
+
+    // Safe property getter to avoid cross-origin SecurityError
+    _safeGet(obj, prop) {
+      try {
+        return obj && obj[prop];
+      } catch (e) {
+        return undefined;
+      }
     }
 
     // NEW: Error handling wrapper that always forwards to console.error
@@ -1557,58 +1584,79 @@
       value = this._getActualValue(value);
 
       // If it's our dogeiscutObject representation, convert entries recursively
-      if (value && typeof value === 'object' && value.map && value.customId === 'dogeiscutObject') {
-        const out = {};
-        try {
-          if (seen.has(value)) return '[Circular]';
-          seen.add(value);
-          for (const entry of value.map) {
-            if (Array.isArray(entry) && entry.length >= 2) {
-              const k = entry[0];
-              const v = entry[1];
-              out[k] = this._convertToNativeValue(v, seen);
+      try {
+        const hasMap = this._safeGet(value, 'map');
+        const cid = this._safeGet(value, 'customId');
+        if (value && typeof value === 'object' && hasMap && cid === 'dogeiscutObject') {
+          const out = {};
+          try {
+            if (seen.has(value)) return '[Circular]';
+            seen.add(value);
+            for (const entry of value.map) {
+              if (Array.isArray(entry) && entry.length >= 2) {
+                const k = entry[0];
+                const v = entry[1];
+                out[k] = this._convertToNativeValue(v, seen);
+              }
             }
+          } catch (e) {
+            return Object.fromEntries(value.map);
           }
-        } catch (e) {
-          return Object.fromEntries(value.map);
+          return out;
         }
-        return out;
+      } catch (e) {
+        return value;
       }
 
       // If it's our jwArray representation, convert items recursively
-      if (value && typeof value === 'object' && value.array && value.customId === 'jwArray') {
-        try {
-          if (seen.has(value)) return '[Circular]';
-          seen.add(value);
-          return value.array.map(item => this._convertToNativeValue(item, seen));
-        } catch (e) {
-          return value.array;
+      try {
+        const hasArray = this._safeGet(value, 'array');
+        const cid2 = this._safeGet(value, 'customId');
+        if (value && typeof value === 'object' && hasArray && cid2 === 'jwArray') {
+          try {
+            if (seen.has(value)) return '[Circular]';
+            seen.add(value);
+            return value.array.map(item => this._convertToNativeValue(item, seen));
+          } catch (e) {
+            return value.array;
+          }
         }
+      } catch (e) {
+        return value;
       }
 
       // If it's a plain Array that might contain wrapped items, convert them
       if (Array.isArray(value)) {
-        if (seen.has(value)) return '[Circular]';
-        seen.add(value);
-        return value.map(item => this._convertToNativeValue(item, seen));
+        try {
+          if (seen.has(value)) return '[Circular]';
+          seen.add(value);
+          return value.map(item => this._convertToNativeValue(item, seen));
+        } catch (e) {
+          return value;
+        }
       }
 
       // If it's a plain object, only recursively convert its own properties
       if (value && typeof value === 'object') {
-        if (seen.has(value)) return '[Circular]';
-        seen.add(value);
-        const out = {};
-        let changed = false;
-        for (const k of Object.keys(value)) {
-          const v = value[k];
-          if (v && (typeof v === 'object' || v instanceof JSObject)) {
-            out[k] = this._convertToNativeValue(v, seen);
-            changed = true;
-          } else {
-            out[k] = v;
+        try {
+          if (seen.has(value)) return '[Circular]';
+          seen.add(value);
+          const out = {};
+          let changed = false;
+          const keys = Object.keys(value);
+          for (const k of keys) {
+            const v = this._safeGet(value, k);
+            if (v && (typeof v === 'object' || v instanceof JSObject)) {
+              out[k] = this._convertToNativeValue(v, seen);
+              changed = true;
+            } else {
+              out[k] = v;
+            }
           }
+          return changed ? out : value;
+        } catch (e) {
+          return value;
         }
-        return changed ? out : value;
       }
 
       return value;
