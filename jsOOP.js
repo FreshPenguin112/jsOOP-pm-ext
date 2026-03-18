@@ -1553,6 +1553,11 @@
       // Resolve any JSObject or lookup markers first
       value = this._getActualValue(value);
 
+      // If it's a plain wrapper object from serialization, unwrap JSObject-like wrapper
+      if (value && typeof value === 'object' && value.customId === 'jsObject' && 'value' in value) {
+        value = value.value;
+      }
+
       // If it's our dogeiscutObject representation, convert entries recursively
       if (value && typeof value === 'object' && value.map && value.customId === 'dogeiscutObject') {
         const out = {};
