@@ -718,6 +718,20 @@
       return value;
     }
 
+    // Resolve an instance argument for write operations.
+    // Returns an object { holder, value } where `holder` is the JSObject
+    // wrapper (if present) that should be updated when creating a new object,
+    // and `value` is the underlying value to operate on.
+    _resolveInstanceHolder(arg) {
+      if (arg instanceof JSObject) return { holder: arg, value: arg.value };
+      if (arg && typeof arg === 'object' && arg._jsoopLookupMarker && arg.lookupId) {
+        const actual = this._getFromLookupTable(arg.lookupId);
+        if (actual instanceof JSObject) return { holder: actual, value: actual.value };
+        return { holder: null, value: actual };
+      }
+      return { holder: null, value: arg };
+    }
+
     // NEW: Error handling wrapper that always forwards to console.error
     _handleError(error, context) {
       console.error(`JS OOP Error in ${context}:`, error);
@@ -2403,7 +2417,8 @@
         INSTANCE,
         VALUE
       });
-      const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
+      const resolved = this._resolveInstanceHolder(INSTANCE);
+      const target = resolved.value; // underlying value to mutate
 
       let parsed;
       try {
@@ -2422,7 +2437,8 @@
         } else {
           const newObj = Object(target);
           newObj[PROP] = parsed;
-          INSTANCE.value = newObj;
+          if (resolved.holder) resolved.holder.value = newObj;
+          else if (INSTANCE && typeof INSTANCE === 'object') INSTANCE.value = newObj;
         }
         if (DEBUG) console.dir({
           action: 'setPropString(done)',
@@ -2448,7 +2464,8 @@
         INSTANCE,
         VALUE
       });
-      const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
+      const resolved = this._resolveInstanceHolder(INSTANCE);
+      const target = resolved.value;
       const value = this._convertToNativeValue(VALUE);
 
       try {
@@ -2457,11 +2474,12 @@
         } else {
           const newObj = Object(target);
           newObj[PROP] = value;
-          INSTANCE.value = newObj;
+          if (resolved.holder) resolved.holder.value = newObj;
+          else if (INSTANCE && typeof INSTANCE === 'object') INSTANCE.value = newObj;
         }
         if (DEBUG) console.dir({
           action: 'setPropJSObject(done)',
-          target: INSTANCE.value
+          target: resolved.holder ? resolved.holder.value : target
         });
       } catch (err) {
         console.error('JS OOP Error in setPropJSObject:', err);
@@ -2483,27 +2501,30 @@
         INSTANCE,
         VALUE
       });
-      const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
+      const resolved = this._resolveInstanceHolder(INSTANCE);
+      const holder = resolved.holder;
+      const target = resolved.value;
       const value = this._convertToNativeValue(VALUE);
 
       try {
-        if (target && (typeof target === 'object' || typeof target === 'function')) {
+        // If this is a jwArray wrapper (the original object), write to its .array
+        if (target && target instanceof jwArray.Type) {
+          target.array[PROP] = value;
+        } else if (INSTANCE && INSTANCE.customId === 'jwArray' && INSTANCE.array) {
+          // fallback in case wrapper was passed differently
+          INSTANCE.array[PROP] = value;
+        } else if (target && (typeof target === 'object' || typeof target === 'function')) {
           target[PROP] = value;
         } else {
           const newObj = Object(target);
           newObj[PROP] = value;
-          INSTANCE.value = newObj;
+          if (holder) holder.value = newObj;
+          else if (INSTANCE && typeof INSTANCE === 'object') INSTANCE.value = newObj;
         }
-        if (DEBUG) console.dir({
-          action: 'setPropJwArray(done)',
-          target: INSTANCE.value
-        });
+        if (DEBUG) console.dir({ action: 'setPropJwArray(done)', target: holder ? holder.value : target });
       } catch (err) {
         console.error('JS OOP Error in setPropJwArray:', err);
-        if (DEBUG) console.dir({
-          action: 'setPropJwArray(error)',
-          error: err
-        });
+        if (DEBUG) console.dir({ action: 'setPropJwArray(error)', error: err });
       }
     }
 
@@ -2518,27 +2539,46 @@
         INSTANCE,
         VALUE
       });
-      const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
+      const resolved = this._resolveInstanceHolder(INSTANCE);
+      const holder = resolved.holder;
+      const target = resolved.value;
       const value = this._convertToNativeValue(VALUE);
 
       try {
-        if (target && (typeof target === 'object' || typeof target === 'function')) {
+        // If this is a dogeiscutObject wrapper (has map), update its map entries
+        if (target && target.customId === 'dogeiscutObject' && Array.isArray(target.map)) {
+          // find existing key
+          let found = false;
+          for (let i = 0; i < target.map.length; i++) {
+            if (target.map[i][0] === PROP) {
+              target.map[i][1] = value;
+              found = true;
+              break;
+            }
+          }
+          if (!found) target.map.push([PROP, value]);
+        } else if (INSTANCE && INSTANCE.customId === 'dogeiscutObject' && Array.isArray(INSTANCE.map)) {
+          let found = false;
+          for (let i = 0; i < INSTANCE.map.length; i++) {
+            if (INSTANCE.map[i][0] === PROP) {
+              INSTANCE.map[i][1] = value;
+              found = true;
+              break;
+            }
+          }
+          if (!found) INSTANCE.map.push([PROP, value]);
+        } else if (target && (typeof target === 'object' || typeof target === 'function')) {
           target[PROP] = value;
         } else {
           const newObj = Object(target);
           newObj[PROP] = value;
-          INSTANCE.value = newObj;
+          if (holder) holder.value = newObj;
+          else if (INSTANCE && typeof INSTANCE === 'object') INSTANCE.value = newObj;
         }
-        if (DEBUG) console.dir({
-          action: 'setPropDogeiscutObject(done)',
-          target: INSTANCE.value
-        });
+        if (DEBUG) console.dir({ action: 'setPropDogeiscutObject(done)', target: holder ? holder.value : target });
       } catch (err) {
         console.error('JS OOP Error in setPropDogeiscutObject:', err);
-        if (DEBUG) console.dir({
-          action: 'setPropDogeiscutObject(error)',
-          error: err
-        });
+        if (DEBUG) console.dir({ action: 'setPropDogeiscutObject(error)', error: err });
       }
     }
 
