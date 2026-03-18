@@ -1552,63 +1552,59 @@
     _convertToNativeValue(value) {
       // Resolve any JSObject or lookup markers first
       value = this._getActualValue(value);
+      try {
+        // If it's a plain wrapper object from serialization, unwrap JSObject-like wrapper
+        if (value && typeof value === 'object' && value.customId === 'jsObject' && 'value' in value) {
+          value = value.value;
+        }
 
-      // If it's a plain wrapper object from serialization, unwrap JSObject-like wrapper
-      if (value && typeof value === 'object' && value.customId === 'jsObject' && 'value' in value) {
-        value = value.value;
-      }
+        // If it's our dogeiscutObject representation, convert entries recursively
+        if (value && typeof value === 'object') {
+          const customId = value.customId;
+          if (customId === 'dogeiscutObject' && value.map) {
+            const out = {};
+            for (const entry of value.map) {
+              if (Array.isArray(entry) && entry.length >= 2) {
+                const k = entry[0];
+                const v = entry[1];
+                out[k] = this._convertToNativeValue(v);
+              }
+            }
+            return out;
+          }
 
-      // If it's our dogeiscutObject representation, convert entries recursively
-      if (value && typeof value === 'object' && value.map && value.customId === 'dogeiscutObject') {
-        const out = {};
-        try {
-          for (const entry of value.map) {
-            // entry may be [key, val] or an object-like pair
-            if (Array.isArray(entry) && entry.length >= 2) {
-              const k = entry[0];
-              const v = entry[1];
+          // If it's our jwArray representation, convert items recursively
+          if (customId === 'jwArray' && value.array) {
+            return value.array.map(item => this._convertToNativeValue(item));
+          }
+        }
+
+        // If it's a plain Array that might contain wrapped items, convert them
+        if (Array.isArray(value)) {
+          return value.map(item => this._convertToNativeValue(item));
+        }
+
+        // If it's a plain object, only recursively convert its own properties
+        if (value && typeof value === 'object') {
+          const out = {};
+          let changed = false;
+          for (const k of Object.keys(value)) {
+            const v = value[k];
+            if (v && (typeof v === 'object' || v instanceof JSObject)) {
               out[k] = this._convertToNativeValue(v);
+              changed = true;
+            } else {
+              out[k] = v;
             }
           }
-        } catch (e) {
-          return Object.fromEntries(value.map);
+          return changed ? out : value;
         }
-        return out;
-      }
 
-      // If it's our jwArray representation, convert items recursively
-      if (value && typeof value === 'object' && value.array && value.customId === 'jwArray') {
-        try {
-          return value.array.map(item => this._convertToNativeValue(item));
-        } catch (e) {
-          return value.array;
-        }
+        return value;
+      } catch (e) {
+        // Likely a cross-origin SecurityError when reading properties; bail out and return original value
+        return value;
       }
-
-      // If it's a plain Array that might contain wrapped items, convert them
-      if (Array.isArray(value)) {
-        return value.map(item => this._convertToNativeValue(item));
-      }
-
-      // If it's a plain object, only recursively convert its own properties
-      if (value && typeof value === 'object') {
-        const out = {};
-        let changed = false;
-        for (const k of Object.keys(value)) {
-          const v = value[k];
-          // Only recurse into values that look like wrapped/custom types or arrays/objects
-          if (v && (typeof v === 'object' || v instanceof JSObject)) {
-            out[k] = this._convertToNativeValue(v);
-            changed = true;
-          } else {
-            out[k] = v;
-          }
-        }
-        // If we actually converted anything, return the converted object, otherwise return original
-        return changed ? out : value;
-      }
-
-      return value;
     }
 
     _convertToSafeString(value) {
