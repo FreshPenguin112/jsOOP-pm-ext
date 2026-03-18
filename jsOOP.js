@@ -2428,11 +2428,17 @@
       }
 
       try {
+        let toSet = parsed;
+        if (toSet === null && VALUE !== null) {
+          const actual = this._getActualValue(VALUE);
+          toSet = (actual === null || actual === undefined) ? VALUE : actual;
+        }
+
         if (target && (typeof target === 'object' || typeof target === 'function')) {
-          target[PROP] = parsed;
+          target[PROP] = toSet;
         } else {
           const newObj = Object(target);
-          newObj[PROP] = parsed;
+          newObj[PROP] = toSet;
           INSTANCE.value = newObj;
         }
         if (DEBUG) console.dir({
@@ -2460,7 +2466,11 @@
         VALUE
       });
       const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
-      const value = this._convertToNativeValue(VALUE);
+      let value = this._convertToNativeValue(VALUE);
+      if (value === null && VALUE !== null) {
+        const actual = this._getActualValue(VALUE);
+        value = (actual === null || actual === undefined) ? VALUE : actual;
+      }
 
       try {
         if (target && (typeof target === 'object' || typeof target === 'function')) {
@@ -2495,7 +2505,11 @@
         VALUE
       });
       const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
-      const value = this._convertToNativeValue(VALUE);
+      let value = this._convertToNativeValue(VALUE);
+      if (value === null && VALUE !== null) {
+        const actual = this._getActualValue(VALUE);
+        value = (actual === null || actual === undefined) ? VALUE : actual;
+      }
 
       try {
         if (target && (typeof target === 'object' || typeof target === 'function')) {
@@ -2530,7 +2544,11 @@
         VALUE
       });
       const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
-      const value = this._convertToNativeValue(VALUE);
+      let value = this._convertToNativeValue(VALUE);
+      if (value === null && VALUE !== null) {
+        const actual = this._getActualValue(VALUE);
+        value = (actual === null || actual === undefined) ? VALUE : actual;
+      }
 
       try {
         if (target && (typeof target === 'object' || typeof target === 'function')) {
