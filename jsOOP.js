@@ -692,9 +692,15 @@
         const proto = Object.getPrototypeOf(obj);
         // Only inspect plain objects (safe to read properties). Avoid host objects (Window, Node, etc.)
         if (proto === Object.prototype || proto === null) {
-          if (obj._jsoopLookupMarker && obj.lookupId) {
-            const actualObject = this._getFromLookupTable(obj.lookupId);
-            if (actualObject instanceof JSObject) return actualObject.value;
+          try {
+            // Accessing properties on some host/cross-origin objects can throw.
+            if (obj._jsoopLookupMarker && obj.lookupId) {
+              const actualObject = this._getFromLookupTable(obj.lookupId);
+              if (actualObject instanceof JSObject) return actualObject.value;
+            }
+          } catch (e) {
+            // If reading properties throws (cross-origin host object), bail out safely.
+            return obj;
           }
         }
       }
@@ -710,9 +716,15 @@
         const proto = Object.getPrototypeOf(value);
         // Only read marker properties on plain objects (safe). Avoid host objects like Window.
         if (proto === Object.prototype || proto === null) {
-          if (value._jsoopLookupMarker && value.lookupId) {
-            const actualObject = this._getFromLookupTable(value.lookupId);
-            if (actualObject instanceof JSObject) return actualObject.value;
+          try {
+            // Accessing properties on some host/cross-origin objects can throw.
+            if (value._jsoopLookupMarker && value.lookupId) {
+              const actualObject = this._getFromLookupTable(value.lookupId);
+              if (actualObject instanceof JSObject) return actualObject.value;
+            }
+          } catch (e) {
+            // If reading properties throws (cross-origin host object), return the original value.
+            return value;
           }
         }
       }
@@ -1558,8 +1570,19 @@
       // Resolve any JSObject or lookup markers first
       value = this._getActualValue(value);
 
+      // If it's an object from a host (e.g., Window from another frame), avoid reading properties
+      if (value && typeof value === 'object') {
+        const proto = Object.getPrototypeOf(value);
+        const isArray = Array.isArray(value);
+        const isPlain = proto === Object.prototype || proto === null;
+        if (!isPlain && !isArray) {
+          // Host objects can throw when reading properties (cross-origin). Return as-is.
+          return value;
+        }
+      }
+
       // If it's our dogeiscutObject representation, convert entries recursively
-      if (value && typeof value === 'object' && value.map && value.customId === 'dogeiscutObject') {
+      if (value && typeof value === 'object' && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) && value.map && value.customId === 'dogeiscutObject') {
         const out = {};
         try {
           if (seen.has(value)) return '[Circular]';
@@ -1578,7 +1601,7 @@
       }
 
       // If it's our jwArray representation, convert items recursively
-      if (value && typeof value === 'object' && value.array && value.customId === 'jwArray') {
+      if (value && typeof value === 'object' && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) && value.array && value.customId === 'jwArray') {
         try {
           if (seen.has(value)) return '[Circular]';
           seen.add(value);
@@ -1597,6 +1620,7 @@
 
       // If it's a plain object, only recursively convert its own properties
       if (value && typeof value === 'object') {
+        // At this point we've already excluded host objects; proceed safely
         if (seen.has(value)) return '[Circular]';
         seen.add(value);
         const out = {};
