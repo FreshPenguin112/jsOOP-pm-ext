@@ -2393,11 +2393,18 @@
         const val = target[PROP];
         if (DEBUG) console.dir({ action: 'getProp(result)', val });
 
-        // If the property is an object/function or a lookup/custom marker,
-        // return a JSObject wrapper so further get/set operations operate on
-        // the original object rather than on a converted plain copy.
-        if (val !== null && val !== undefined && (typeof val === 'object' || typeof val === 'function' || (val && typeof val === 'object' && (val._jsoopLookupMarker || val.customId)))) {
-          return this._wrapForOtherExtensions(JSObject.toType(val));
+        // If the property is an object/function, return a JSObject wrapper so
+        // nested get/set calls operate on the same underlying object.
+        if (val !== null && val !== undefined && (typeof val === 'object' || typeof val === 'function')) {
+          try {
+            const jsobj = new JSObject(val);
+            // Store it in the lookup table so it can be referenced across blocks.
+            this._storeInLookupTable(jsobj);
+            return jsobj;
+          } catch (e) {
+            // Fallback to wrapper
+            return this._wrapForOtherExtensions(JSObject.toType(val));
+          }
         }
 
         return this._getActualValue(this._convertToNativeValue(val));
