@@ -2387,22 +2387,22 @@
         PROP,
         INSTANCE
       });
-      const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
+      const resolved = this._resolveInstanceHolder(INSTANCE);
+      const target = resolved.value; // underlying value to read from
 
       try {
-        const val = target[PROP];
+        const val = target && (typeof target === 'object' || typeof target === 'function') ? target[PROP] : undefined;
         if (DEBUG) console.dir({ action: 'getProp(result)', val });
 
-        // If the property is an object/function, return a JSObject wrapper so
-        // nested get/set calls operate on the same underlying object.
+        // If the property is an object/function, return a lookup marker so
+        // nested get/set calls can resolve the same underlying object.
         if (val !== null && val !== undefined && (typeof val === 'object' || typeof val === 'function')) {
           try {
             const jsobj = new JSObject(val);
-            // Store it in the lookup table so it can be referenced across blocks.
-            this._storeInLookupTable(jsobj);
-            return jsobj;
+            // Store and return the lookup marker which survives serialization.
+            return this._storeInLookupTable(jsobj);
           } catch (e) {
-            // Fallback to wrapper
+            // Fallback to plain wrapper for non-serializables
             return this._wrapForOtherExtensions(JSObject.toType(val));
           }
         }
