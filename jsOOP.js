@@ -885,6 +885,19 @@
               writable: false,
               configurable: true,
             });
+            try {
+              Object.defineProperty(fn, "_jsoopDefaults", { value: m.defaults || {}, writable: false, configurable: true });
+            } catch (_) {}
+            try {
+              if (m && m.firstBlockId) {
+                Object.defineProperty(fn, "_jsoopFirstBlockId", { value: m.firstBlockId, writable: false, configurable: true });
+              }
+            } catch (_) {}
+            try {
+              if (m && m.thread) {
+                Object.defineProperty(fn, "_jsoopAttachedThread", { value: m.thread, writable: false, configurable: true });
+              }
+            } catch (_) {}
           } catch (_) {
             /* ignore */
           }
@@ -909,7 +922,10 @@
     }
 
     _isJsoopFactory(fn) {
-      return typeof fn === "function" && fn._jsoopFactory === true;
+      return (
+        typeof fn === "function" &&
+        (fn._jsoopFactory === true || !!fn._jsoopAttachedThread || !!fn._jsoopFirstBlockId)
+      );
     }
 
     _getJsoopParamNames(fn) {
@@ -947,7 +963,6 @@
     }
 
     async _invokeJsoopFactory(fn, thisArg, thread, args) {
-      const clonedThread = thread && typeof thread.clone === "function" ? thread.clone() : thread;
       const paramNames = this._getJsoopParamNames(fn);
       const defaults = fn && fn._jsoopDefaults ? fn._jsoopDefaults : {};
       const argObject = {};
@@ -956,19 +971,103 @@
         const value = i < args.length ? args[i] : undefined;
         argObject[key] = value === undefined && Object.prototype.hasOwnProperty.call(defaults, key) ? defaults[key] : value;
       }
-      if (clonedThread) clonedThread.jsoopArgs = argObject;
 
-      const factoryResult = fn.apply(thisArg, [clonedThread].concat(args));
-      if (typeof factoryResult === "function" && this._isGeneratorFunction(factoryResult)) {
-        return await this._runJsoopGenerator(() => factoryResult.apply(thisArg));
-      }
-      if (factoryResult && typeof factoryResult.next === "function") {
-        return await this._runJsoopGenerator(factoryResult);
-      }
-      if (factoryResult && typeof factoryResult.then === "function") {
-        return await factoryResult;
-      }
-      return factoryResult;
+      // If this function has an attached thread/template, start a real VM thread
+      // via vm.runtime._pushThread and wait for it to finish. This replaces the
+      // previous factory invocation approach.
+      try {
+        const attached = fn && (fn._jsoopAttachedThread || fn._jsoopFirstBlockId);
+        if (attached) {
+          let id = null;
+          let target = null;
+
+          if (fn._jsoopFirstBlockId) {
+            id = fn._jsoopFirstBlockId;
+            // Default to caller thread's target so the pushed thread runs in
+            // the same target context as the caller when no explicit target
+            // was stored at compile-time.
+            try {
+              target = thread && thread.target ? thread.target : null;
+            } catch (e) {
+              target = null;
+            }
+          } else if (fn._jsoopAttachedThread) {
+            const tpl = fn._jsoopAttachedThread;
+            if (!tpl) {
+              id = null;
+            } else if (typeof tpl === "string") {
+              id = tpl;
+            } else if (tpl.firstBlockId) {
+              id = tpl.firstBlockId;
+            } else if (tpl.topBlock) {
+              id = tpl.topBlock;
+            } else if (Array.isArray(tpl.stack) && tpl.stack.length) {
+              const s0 = tpl.stack[0];
+              if (typeof s0 === "string") id = s0;
+              else if (s0 && typeof s0.id === "string") id = s0.id;
+            } else if (tpl.id) {
+              id = tpl.id;
+            }
+            target = tpl && tpl.target ? tpl.target : null;
+          }
+
+          if (id && typeof vm.runtime._pushThread === "function") {
+            const pushed = vm.runtime._pushThread(id, target, {});
+            if (pushed) {
+              try {
+                pushed.jsoopArgs = argObject;
+              } catch (e) {}
+              try {
+                // allow the pushed thread to know the caller if useful
+                pushed._jsoopCallerThread = thread;
+              } catch (e) {}
+
+              // Wait until the pushed thread finishes by listening for the
+              // THREAD_FINISHED event and resolving only when our pushed
+              // thread completes. This avoids polling.
+              const finishedValue = await new Promise((resolve) => {
+                const endHandler = (t) => {
+                  try {
+                    const finished = t;
+                    const finishedId = finished && typeof finished.getId === 'function' ? finished.getId() : (finished && finished.id ? finished.id : null);
+                    const pushedId = pushed && typeof pushed.getId === 'function' ? pushed.getId() : (pushed && pushed.id ? pushed.id : null);
+                    if (finishedId === pushedId) {
+                      try {
+                        vm.runtime.removeListener('THREAD_FINISHED', endHandler);
+                      } catch (e) {}
+                      try {
+                        return resolve(finished && finished.justReturned);
+                      } catch (e) {
+                        return resolve(undefined);
+                      }
+                    }
+                  } catch (e) {
+                    try {
+                      return resolve(undefined);
+                    } catch (ee) {}
+                  }
+                };
+                try {
+                  vm.runtime.on('THREAD_FINISHED', endHandler);
+                } catch (e) {
+                  // Fallback to polling if event binding isn't supported
+                  const check = () => {
+                    try {
+                      if (pushed.status === vm.exports.Thread.STATUS_DONE) return resolve(pushed.justReturned);
+                    } catch (e) {}
+                    setTimeout(check, 5);
+                  };
+                  check();
+                }
+              });
+
+              return finishedValue;
+            }
+          }
+        }
+      } catch (e) {}
+          // No fallback: if pushThread path failed, return undefined
+          return undefined;
     }
 
     getInfo() {
@@ -2013,57 +2112,7 @@
             }
 
             compiler.source += `${methodsVar} = thread._jsoopClassStack.pop();`;
-            compiler.source += `const C = class {};
-`;
-            compiler.source += `for (const m of ${methodsVar}) {
-`;
-            compiler.source += `  const ${sourceVar} = String(m.body || '');
-`;
-            compiler.source += `  const ${paramsVar} = Array.isArray(m.params) ? m.params : [];
-`;
-            compiler.source += `  const ${typeVar} = String(m.type || '');
-`;
-            compiler.source += `  const ${isAccessorVar} = ${typeVar}.includes('getter') || ${typeVar}.includes('setter');
-`;
-            compiler.source += `  const ${fnVar} = ${isAccessorVar}
-`;
-            compiler.source += `    ? (typeof ${sourceVar} === 'string' && /^\\s*(?:async\\s*)?(?:function\\*?|\\(function\\*?)\\b/.test(${sourceVar})
-`;
-            compiler.source += `      ? eval('(' + ${sourceVar} + ')')
-`;
-            compiler.source += `      : eval('(function() {' + ${sourceVar} + '})'))
-`;
-            compiler.source += `    : (typeof ${sourceVar} === 'string' && /^\\s*(?:async\\s*)?(?:function\\b|\\(function\\b)/.test(${sourceVar})
-`;
-            compiler.source += `      ? eval('(' + ${sourceVar} + ')')
-`;
-            compiler.source += `      : eval('(function*(' + ['thread'].concat(${paramsVar}).join(', ') + ') {' + ${sourceVar} + '} )'));
-`;
-            compiler.source += `  try { Object.defineProperty(${fnVar}, '_jsoopFactory', { value: true, writable: false, configurable: true }); Object.defineProperty(${fnVar}, '_jsoopParams', { value: ${paramsVar}.slice(), writable: false, configurable: true }); Object.defineProperty(${fnVar}, '_jsoopDefaults', { value: m.defaults || {}, writable: false, configurable: true }); } catch (e) { }
-`;
-            compiler.source += `  const ${cleanNameVar} = String(m.name || '').startsWith('#') ? String(m.name).slice(1) : String(m.name);
-`;
-            compiler.source += `  if (${typeVar}.includes('static')) {
-`;
-            compiler.source += `    Object.defineProperty(C, ${cleanNameVar}, { value: ${fnVar}, writable: true, configurable: true });
-`;
-            compiler.source += `  } else if (${typeVar}.includes('getter') || ${typeVar}.includes('setter')) {
-`;
-            compiler.source += `    const ${descVar} = {};
-`;
-            compiler.source += `    if (${typeVar}.includes('getter')) ${descVar}.get = ${fnVar};
-`;
-            compiler.source += `    if (${typeVar}.includes('setter')) ${descVar}.set = ${fnVar};
-`;
-            compiler.source += `    Object.defineProperty(C.prototype, ${cleanNameVar}, ${descVar});
-`;
-            compiler.source += `  } else {
-`;
-            compiler.source += `    Object.defineProperty(C.prototype, ${cleanNameVar}, { value: ${fnVar}, writable: true, configurable: true });
-`;
-            compiler.source += `  }
-`;
-            compiler.source += `}
+            compiler.source += `const C = vm.runtime.ext_jsoop._makeClassFromMethods(${methodsVar}, [], []);
 `;
             compiler.source += `return new vm.runtime.ext_jsoop.JSObject(C);`;
             compiler.source += `})())`;
@@ -2090,23 +2139,9 @@
                 }
 
                 const firstBlock = node.substack[0];
-                if (firstBlock && firstBlock.id) {
-                  const test = new vm.exports.Thread(firstBlock.id);
-                  test.target = vm.runtime.targets.find((t) => firstBlock.id in t.blocks._blocks);
-                  if (test.target) {
-                    test.blockContainer = test.target.blocks;
-                    test.pushStack(firstBlock.id);
-                    const ir = new vm.exports.IRGenerator(test).generate();
-                    const jsCompiler = new vm.exports.JSGenerator(ir.entry, ir, test.target);
-                    jsCompiler.inClassMethod = true;
-                    const js = jsCompiler.compile();
-                    if (typeof js === "string" && js.trim()) {
-                      factorySource = js;
-                    } else if (js && typeof js.toString === "function") {
-                      factorySource = js.toString();
-                    }
-                  }
-                }
+                // Capture first block id for potential runtime thread creation
+                // but avoid performing independent compilation here.
+                const _firstBlock = firstBlock && firstBlock.id ? firstBlock.id : null;
 
                 if (!factorySource) {
                   child.descendStack(node.substack, new imports.Frame(false, undefined, true));
@@ -2117,6 +2152,12 @@
                 compiler.inClassMethod = oldInClassMethod;
               }
             }
+
+            // Store the first block id so we can create a runtime Thread when
+            // the class is actually built. This avoids using an independent
+            // compiler at compile-time and lets the method be represented by
+            // a Thread that the sequencer can run.
+            const firstBlockId = node.substack && node.substack.length > 0 && node.substack[0] && node.substack[0].id ? node.substack[0].id : null;
 
             const type = node.type;
             const name = compiler.descendInput(node.name).asString();
@@ -2153,6 +2194,7 @@
             compiler.source += `    params: ${paramsVar},\n`;
             compiler.source += `    defaults: ${defaultsVar},\n`;
             compiler.source += `    body: ${JSON.stringify(factorySource)},\n`;
+            compiler.source += `    firstBlockId: ${JSON.stringify(firstBlockId)},\n`;
             compiler.source += `    type: ${JSON.stringify(type)}\n`;
             compiler.source += `  });\n`;
             compiler.source += `};\n`;
@@ -2199,30 +2241,30 @@
 
           returnDataString: (node, compiler, imports) => {
             if (compiler.inClassMethod) {
-              compiler.source += `return ${compiler.descendInput(node.DATA).asString()};`;
+              compiler.source += `(thread.justReturned = ${compiler.descendInput(node.DATA).asString()}, thread.stopThisScript(), undefined);`;
             } else {
-              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asString()}, thread.stopThisScript(), '');`;
+              compiler.source += `(thread.justReturned = ${compiler.descendInput(node.DATA).asString()}, thread.stopThisScript(), '');`;
             }
           },
           returnDataObject: (node, compiler, imports) => {
             if (compiler.inClassMethod) {
-              compiler.source += `return ${compiler.descendInput(node.DATA).asUnknown()};`;
+              compiler.source += `(thread.justReturned = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), undefined);`;
             } else {
-              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '');`;
+              compiler.source += `(thread.justReturned = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '');`;
             }
           },
           returnDataArray: (node, compiler, imports) => {
             if (compiler.inClassMethod) {
-              compiler.source += `return ${compiler.descendInput(node.DATA).asUnknown()};`;
+              compiler.source += `(thread.justReturned = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), undefined);`;
             } else {
-              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '');`;
+              compiler.source += `(thread.justReturned = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '');`;
             }
           },
           returnDataJsObject: (node, compiler, imports) => {
             if (compiler.inClassMethod) {
-              compiler.source += `return ${compiler.descendInput(node.DATA).asUnknown()};`;
+              compiler.source += `(thread.justReturned = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), undefined);`;
             } else {
-              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '');`;
+              compiler.source += `(thread.justReturned = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '');`;
             }
           },
 
@@ -2625,19 +2667,19 @@
 
     // Return blocks
     returnDataString(args, util) {
-      util.thread.justReported = Scratch.Cast.toString(args.DATA);
+      util.thread.justReturned = Scratch.Cast.toString(args.DATA);
       util.thread.stopThisScript();
     }
     returnDataObject(args, util) {
-      util.thread.justReported = args.DATA;
+      util.thread.justReturned = args.DATA;
       util.thread.stopThisScript();
     }
     returnDataArray(args, util) {
-      util.thread.justReported = args.DATA;
+      util.thread.justReturned = args.DATA;
       util.thread.stopThisScript();
     }
     returnDataJsObject(args, util) {
-      util.thread.justReported = args.DATA;
+      util.thread.justReturned = args.DATA;
       util.thread.stopThisScript();
     }
 
