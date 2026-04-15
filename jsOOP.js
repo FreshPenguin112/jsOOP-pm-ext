@@ -1,18 +1,19 @@
 /* jshint esversion:11 */
 
-(async function(Scratch) {
-  'use strict';
+(async function (Scratch) {
+  "use strict";
 
   if (!Scratch.extensions || !Scratch.extensions.unsandboxed) {
     throw new Error("'JS OOP' extension must run unsandboxed!");
   }
 
   const vm = Scratch.vm;
-  const DEBUG = false;
 
-  const isNode = typeof process !== 'undefined' && !!process.versions && !!process.versions.node; // This could be simpler but this is the most "official" way to check
+  const DEBUG = true;
 
-  if (!vm.jwArray) vm.extensionManager.loadExtensionIdSync('jwArray');
+  const isNode = typeof process !== "undefined" && !!process.versions && !!process.versions.node; // This could be simpler but this is the most "official" way to check
+
+  if (!vm.jwArray) vm.extensionManager.loadExtensionIdSync("jwArray");
   const jwArray = vm.jwArray;
 
   // Wait a few seconds before trying to load dogeiscutObject to give the project a chance to load it first
@@ -20,13 +21,14 @@
   if (!vm.dogeiscutObject) {
     setTimeout(() => {
       if (!vm.dogeiscutObject) {
-        vm.extensionManager.loadExtensionURL("https://extensions.penguinmod.com/extensions/DogeisCut/dogeiscutObject.js")
+        vm.extensionManager
+          .loadExtensionURL("https://extensions.penguinmod.com/extensions/DogeisCut/dogeiscutObject.js")
           .then(() => {
             dogeiscutObjectLoaded = true;
-            if (DEBUG) console.log('dogeiscutObject loaded successfully');
+            if (DEBUG) console.log("dogeiscutObject loaded successfully");
           })
           .catch((error) => {
-            console.error('Failed to load dogeiscutObject:', error);
+            console.error("Failed to load dogeiscutObject:", error);
             // Continue even if loading fails
             dogeiscutObjectLoaded = false;
           });
@@ -52,27 +54,36 @@
     });
 
     const recyclableDiv = document.createElement("div");
-    recyclableDiv.setAttribute("style", `display: flex; justify-content: center; padding-top: 10px; width: 250px; height: 200px;`);
+    recyclableDiv.setAttribute(
+      "style",
+      `display: flex; justify-content: center; padding-top: 10px; width: 250px; height: 200px;`,
+    );
 
     const fakeDiv = document.createElement("div");
-    fakeDiv.setAttribute("style", "background: #272822; border-radius: 10px; border: none; width: 100%; height: calc(100% - 20px);");
+    fakeDiv.setAttribute(
+      "style",
+      "background: #272822; border-radius: 10px; border: none; width: 100%; height: calc(100% - 20px);",
+    );
     recyclableDiv.appendChild(fakeDiv);
 
     ScratchBlocks.FieldCustom.registerInput(
       "jsoop-codeEditor",
       recyclableDiv,
       (field) => {
-
         const inputObject = field.inputSource;
         const input = inputObject.firstChild;
         const srcBlock = field.sourceBlock_;
         const parent = srcBlock.parentBlock_;
-        const dragCheck = parent.isInFlyout || srcBlock.svgGroup_.classList.contains("blocklyDragging") ? "none" : "all";
+        const dragCheck =
+          parent.isInFlyout || srcBlock.svgGroup_.classList.contains("blocklyDragging") ? "none" : "all";
 
         inputObject.setAttribute("pointer-events", "none");
         input.style.height = "210px";
         const iframe = document.createElement("iframe");
-        iframe.setAttribute("style", `pointer-events: ${dragCheck}; background: #272822; border-radius: 10px; border: none; ${isSafari ? "" : "width: 100%;"} height: calc(100% - 20px);`);
+        iframe.setAttribute(
+          "style",
+          `pointer-events: ${dragCheck}; background: #272822; border-radius: 10px; border: none; ${isSafari ? "" : "width: 100%;"} height: calc(100% - 20px);`,
+        );
         iframe.setAttribute("sandbox", "allow-scripts");
 
         const html = `
@@ -103,9 +114,11 @@
         </script>
         </body>
         </html>`;
-        iframe.src = URL.createObjectURL(new Blob([html], {
-          type: "text/html"
-        }));
+        iframe.src = URL.createObjectURL(
+          new Blob([html], {
+            type: "text/html",
+          }),
+        );
         input.replaceChild(iframe, input.firstChild);
         iframe.onload = () => {
           let value = field.getValue();
@@ -116,15 +129,21 @@
             field.setValue(value);
           }
 
-          iframe.contentWindow.postMessage({
-            value
-          }, "*");
+          iframe.contentWindow.postMessage(
+            {
+              value,
+            },
+            "*",
+          );
         };
 
         codeEditorHandlers.set(srcBlock.id, (value) => field.setValue(value));
 
         const resizeHandle = document.createElement("div");
-        resizeHandle.setAttribute("style", `pointer-events: ${dragCheck}; position: absolute; right: 5px; bottom: 15px; width: 12px; height: 12px; background: #ffffff40; cursor: se-resize; border-radius: 0px 0 50px 0;`);
+        resizeHandle.setAttribute(
+          "style",
+          `pointer-events: ${dragCheck}; position: absolute; right: 5px; bottom: 15px; width: 12px; height: 12px; background: #ffffff40; cursor: se-resize; border-radius: 0px 0 50px 0;`,
+        );
         input.appendChild(resizeHandle);
 
         let isResizing = false;
@@ -180,38 +199,40 @@
             }
           }
           ogSetAtt.call(parent.svgGroup_, ...args);
-        }
+        };
       },
-      () => { },
-      () => { }
+      () => {},
+      () => {},
     );
   }
   if (isScratchBlocksReady) initBlockTools();
 
   function safeSerialize(obj) {
     const seen = new WeakSet();
-    return JSON.stringify(obj, function(key, value) {
-
-      if (typeof value === 'bigint') {
-        const minSafe = BigInt(Number.MIN_SAFE_INTEGER);
-        const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
-        if (value >= minSafe && value <= maxSafe) {
-          return Number(value);
-        } else {
-          return value.toString();
+    return JSON.stringify(
+      obj,
+      function (key, value) {
+        if (typeof value === "bigint") {
+          const minSafe = BigInt(Number.MIN_SAFE_INTEGER);
+          const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+          if (value >= minSafe && value <= maxSafe) {
+            return Number(value);
+          } else {
+            return value.toString();
+          }
         }
-      }
 
-      if (value && typeof value === 'object') {
-        if (seen.has(value)) return '[Circular]';
-        seen.add(value);
-      }
-      return value;
-    }, 2);
+        if (value && typeof value === "object") {
+          if (seen.has(value)) return "[Circular]";
+          seen.add(value);
+        }
+        return value;
+      },
+      2,
+    );
   }
 
   class JSObject {
-
     get customId() {
       return "jsObject";
     }
@@ -226,9 +247,9 @@
         const t = typeof v;
 
         if (v === null) return null;
-        if (t === 'number' || t === 'boolean' || t === 'string') return v;
-        if (t === 'undefined') return undefined;
-        if (t === 'bigint') {
+        if (t === "number" || t === "boolean" || t === "string") return v;
+        if (t === "undefined") return undefined;
+        if (t === "bigint") {
           const minSafe = BigInt(Number.MIN_SAFE_INTEGER);
           const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
           if (v >= minSafe && v <= maxSafe) {
@@ -238,7 +259,7 @@
           }
         }
 
-        if (t === 'function') return v.toString();
+        if (t === "function") return v.toString();
 
         try {
           const s = safeSerialize(v);
@@ -246,7 +267,6 @@
             if (DEBUG) console.dir(s);
             return JSON.parse(s);
           } catch (_) {
-
             return s;
           }
         } catch (e) {
@@ -264,27 +284,24 @@
         if (v === undefined) return "undefined";
         const t = typeof v;
         if (t === "function") {
-
           return v.name ? `[Function ${v.name}]` : "[Function]";
         }
         if (t === "object") {
-
           try {
-            if (DEBUG) console.dir({
-              safe: safeSerialize(v)
-            });
+            if (DEBUG)
+              console.dir({
+                safe: safeSerialize(v),
+              });
 
             if (Array.isArray(v)) return `[Array(${v.length})]`;
             if (v && v.constructor && v.constructor.name) return `[${v.constructor.name}]`;
             return "[Object]";
           } catch (e) {
-            return v && v.constructor && v.constructor.name ?
-              `[object ${v.constructor.name}]` :
-              "[object]";
+            return v && v.constructor && v.constructor.name ? `[object ${v.constructor.name}]` : "[object]";
           }
         }
 
-        if (t === 'string') return v;
+        if (t === "string") return v;
         return String(v);
       } catch (e) {
         return "[unprintable]";
@@ -292,10 +309,10 @@
     }
 
     toReporterContent() {
-      const pre = document.createElement('pre');
-      pre.style.whiteSpace = 'pre-wrap';
-      pre.style.margin = '0';
-      pre.style.fontFamily = 'monospace';
+      const pre = document.createElement("pre");
+      pre.style.whiteSpace = "pre-wrap";
+      pre.style.margin = "0";
+      pre.style.fontFamily = "monospace";
       pre.textContent = this.toString();
       return pre;
     }
@@ -313,7 +330,6 @@
     }
 
     fromListEditor(edit) {
-
       try {
         this.value = JSON.parse(edit);
       } catch {
@@ -323,7 +339,6 @@
     }
 
     static toType(x) {
-
       if (x instanceof JSObject) return x;
 
       // Check if it's a lookup table marker from another extension
@@ -338,13 +353,11 @@
       }
 
       if (x && typeof x === "object" && x.customId && typeof x.customId === "string") {
-
         try {
           if (vm && vm.runtime && vm.runtime.serializers && vm.runtime.serializers[x.customId]) {
-
             return new JSObject(x);
           }
-        } catch (_) { }
+        } catch (_) {}
         return new JSObject(x);
       }
 
@@ -352,49 +365,55 @@
     }
 
     static prepareForSerialize(v) {
-
       // Check if this should be stored in the lookup table
       const ext = vm.runtime.ext_jsoop;
       if (ext && ext._shouldUseLookupTable(v)) {
         const marker = ext._storeInLookupTable(new JSObject(v));
         return {
           _jsoopLookupMarker: true,
-          lookupId: marker.lookupId
+          lookupId: marker.lookupId,
         };
       }
 
-      if (v && typeof v === 'object' && v.customId && vm && vm.runtime && vm.runtime.serializers && vm.runtime.serializers[v.customId]) {
+      if (
+        v &&
+        typeof v === "object" &&
+        v.customId &&
+        vm &&
+        vm.runtime &&
+        vm.runtime.serializers &&
+        vm.runtime.serializers[v.customId]
+      ) {
         try {
           return {
             _nestedCustom: true,
             typeId: v.customId,
-            data: vm.runtime.serializers[v.customId].serialize(v)
+            data: vm.runtime.serializers[v.customId].serialize(v),
           };
-        } catch (e) { }
+        } catch (e) {}
       }
 
-      if (typeof v === 'function') {
+      if (typeof v === "function") {
         return {
-          _functionSource: v.toString()
+          _functionSource: v.toString(),
         };
       }
 
       try {
         const json = safeSerialize(v);
         return {
-          _json: json
+          _json: json,
         };
       } catch (e) {
-
         return {
-          _string: String(v)
+          _string: String(v),
         };
       }
     }
 
     static reconstructFromSerialize(obj) {
       try {
-        if (obj && typeof obj === 'object') {
+        if (obj && typeof obj === "object") {
           // Handle lookup table markers during deserialization
           if (obj._jsoopLookupMarker && obj.lookupId) {
             const ext = vm.runtime.ext_jsoop;
@@ -408,22 +427,19 @@
             // return a placeholder
             return new JSObject({
               _jsoopLookupMissing: true,
-              originalLookupId: obj.lookupId
+              originalLookupId: obj.lookupId,
             });
           }
 
           if (obj._nestedCustom && obj.typeId && vm.runtime.serializers[obj.typeId]) {
             return vm.runtime.serializers[obj.typeId].deserialize(obj.data);
           }
-          if (obj._functionSource && typeof obj._functionSource === 'string') {
-
+          if (obj._functionSource && typeof obj._functionSource === "string") {
             try {
-
-              const fn = eval('(' + obj._functionSource + ')');
+              const fn = eval("(" + obj._functionSource + ")");
               return fn;
             } catch (e) {
               try {
-
                 return eval(obj._functionSource);
               } catch (ee) {
                 return obj._functionSource;
@@ -434,7 +450,6 @@
             try {
               return JSON.parse(obj._json);
             } catch (e) {
-
               return obj._json;
             }
           }
@@ -442,7 +457,7 @@
             return obj._string;
           }
         }
-      } catch (e) { }
+      } catch (e) {}
       return null;
     }
   }
@@ -458,8 +473,8 @@
     Argument: {
       shape: Scratch.BlockShape.BUMPED,
       exemptFromNormalization: true,
-      check: ["JSObject"]
-    }
+      check: ["JSObject"],
+    },
   };
 
   if (isNode) {
@@ -473,44 +488,43 @@
       this._jsObjectLookup = new Map();
       this._nextLookupId = 1;
       this._lookupTableEnabled = true;
+      this._classArgDefaults = new Map();
 
       // Store built-in objects that should always be in lookup table
       this._builtInObjects = new Map();
 
-      vm.runtime.registerCompiledExtensionBlocks('jsoop', this.getCompileInfo());
+      vm.runtime.registerCompiledExtensionBlocks("jsoop", this.getCompileInfo());
 
-      if (vm && vm.runtime && typeof vm.runtime.registerSerializer === 'function') {
+      if (vm && vm.runtime && typeof vm.runtime.registerSerializer === "function") {
         vm.runtime.registerSerializer(
           "jsObject",
           (v) => {
-
             if (v instanceof JSObject) {
               try {
                 const inner = v.value;
 
                 return {
-                  wrapped: JSObject.prepareForSerialize(inner)
+                  wrapped: JSObject.prepareForSerialize(inner),
                 };
               } catch (e) {
                 return {
                   wrapped: {
-                    _string: String(v.value)
-                  }
+                    _string: String(v.value),
+                  },
                 };
               }
             }
             return null;
           },
           (data) => {
-
             try {
-              if (!data || typeof data !== 'object') return null;
+              if (!data || typeof data !== "object") return null;
               const reconstructed = JSObject.reconstructFromSerialize(data.wrapped);
               return new JSObject(reconstructed);
             } catch (_) {
               return null;
             }
-          }
+          },
         );
       }
 
@@ -534,12 +548,31 @@
     // Initialize built-in objects that should always be in lookup table
     _initializeBuiltInObjects() {
       const builtIns = [
-        Math, Object, Array, String, Number, Boolean, Function,
-        Date, RegExp, JSON, Promise, Error, Map, Set, WeakMap, WeakSet,
-        Symbol, Proxy, Reflect, Intl, console, globalThis
+        Math,
+        Object,
+        Array,
+        String,
+        Number,
+        Boolean,
+        Function,
+        Date,
+        RegExp,
+        JSON,
+        Promise,
+        Error,
+        Map,
+        Set,
+        WeakMap,
+        WeakSet,
+        Symbol,
+        Proxy,
+        Reflect,
+        Intl,
+        console,
+        globalThis,
       ];
 
-      builtIns.forEach(builtIn => {
+      builtIns.forEach((builtIn) => {
         const jsObject = new JSObject(builtIn);
         const lookupId = this._generateLookupId();
         this._builtInObjects.set(builtIn, lookupId);
@@ -562,7 +595,10 @@
         return {
           _jsoopLookupMarker: true,
           lookupId: builtInLookupId,
-          toString: () => new JSObject().toString.apply({ value: this._convertToNativeValue(this._getFromLookupTable(builtInLookupId)) }),
+          toString: () =>
+            new JSObject().toString.apply({
+              value: this._convertToNativeValue(this._getFromLookupTable(builtInLookupId)),
+            }),
           toJSON: () => ({ _jsoopLookupMarker: true, lookupId: builtInLookupId }),
         };
       }
@@ -570,15 +606,38 @@
       const lookupId = this._generateLookupId();
       this._jsObjectLookup.set(lookupId, jsObject);
 
-      if (DEBUG) console.log('Stored JSObject in lookup table:', lookupId, jsObject);
+      if (DEBUG) console.log("Stored JSObject in lookup table:", lookupId, jsObject);
 
       // Return a marker object that other extensions can store
       return {
         _jsoopLookupMarker: true,
         lookupId: lookupId,
-        toString: () => new JSObject().toString.apply({ value: this._convertToNativeValue(this._getFromLookupTable(lookupId)) }),
+        toString: () =>
+          new JSObject().toString.apply({
+            value: this._convertToNativeValue(this._getFromLookupTable(lookupId)),
+          }),
         toJSON: () => ({ _jsoopLookupMarker: true, lookupId: lookupId }),
       };
+    }
+
+    // Store a class-arg default value in the lookup table and return the lookup ID.
+    _storeClassArgDefault(defaultValue) {
+      const marker = this._storeInLookupTable(new JSObject(defaultValue));
+      if (marker && marker.lookupId) {
+        this._classArgDefaults.set(marker.lookupId, defaultValue);
+        return marker;
+      }
+      return null;
+    }
+
+    // Internal method to retrieve a stored class arg default by lookup ID.
+    _getClassArgDefault(lookupId) {
+      if (this._classArgDefaults.has(lookupId)) {
+        return this._classArgDefaults.get(lookupId);
+      }
+      const obj = this._getFromLookupTable(lookupId);
+      if (obj instanceof JSObject) return obj.value;
+      return obj;
     }
 
     // Internal method to retrieve JSObject from lookup table
@@ -586,7 +645,7 @@
       if (!this._lookupTableEnabled) return null;
 
       const obj = this._jsObjectLookup.get(lookupId);
-      if (DEBUG && obj) console.log('Retrieved JSObject from lookup table:', lookupId, obj);
+      if (DEBUG && obj) console.log("Retrieved JSObject from lookup table:", lookupId, obj);
       return obj;
     }
 
@@ -598,13 +657,13 @@
       const type = typeof value;
 
       // Always use lookup table for functions
-      if (type === 'function') return true;
+      if (type === "function") return true;
 
       // Check if it's a built-in object
       if (this._isBuiltInObject(value)) return true;
 
       // For objects, check if they're problematic for serialization
-      if (type === 'object') {
+      if (type === "object") {
         // DOM elements
         if (value instanceof HTMLElement) return true;
         if (value instanceof Node) return true;
@@ -640,9 +699,28 @@
 
       // Check against known built-in objects
       const builtIns = [
-        Math, Object, Array, String, Number, Boolean, Function,
-        Date, RegExp, JSON, Promise, Error, Map, Set, WeakMap, WeakSet,
-        Symbol, Proxy, Reflect, Intl, console, globalThis
+        Math,
+        Object,
+        Array,
+        String,
+        Number,
+        Boolean,
+        Function,
+        Date,
+        RegExp,
+        JSON,
+        Promise,
+        Error,
+        Map,
+        Set,
+        WeakMap,
+        WeakSet,
+        Symbol,
+        Proxy,
+        Reflect,
+        Intl,
+        console,
+        globalThis,
       ];
 
       return builtIns.includes(value);
@@ -655,8 +733,8 @@
         for (const prop of props) {
           try {
             const value = obj[prop];
-            if (typeof value === 'function') return true;
-            if (value && typeof value === 'object') {
+            if (typeof value === "function") return true;
+            if (value && typeof value === "object") {
               JSON.stringify(value);
             }
           } catch (e) {
@@ -723,7 +801,7 @@
     // and `value` is the underlying value to operate on.
     _resolveInstanceHolder(arg) {
       if (arg instanceof JSObject) return { holder: arg, value: arg.value };
-      if (arg && typeof arg === 'object' && arg._jsoopLookupMarker && arg.lookupId) {
+      if (arg && typeof arg === "object" && arg._jsoopLookupMarker && arg.lookupId) {
         const actual = this._getFromLookupTable(arg.lookupId);
         if (actual instanceof JSObject) return { holder: actual, value: actual.value };
         return { holder: null, value: actual };
@@ -767,37 +845,56 @@
       try {
         const C = class {};
 
+        const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
         for (const m of methods || []) {
-          const name = String(m.name || '');
-          const params = Array.isArray(m.params) ? m.params.map(p => String(p)) : [];
-          const body = String(m.body || '');
-          const type = String(m.type || '');
+          const name = String(m.name || "");
+          const params = Array.isArray(m.params) ? m.params.map((p) => String(p)) : [];
+          let body = String(m.body || "");
+          const type = String(m.type || "");
 
           // Private method marker '#' isn't usable via defineProperty; strip it.
-          const cleanName = name.startsWith('#') ? name.slice(1) : name;
+          const cleanName = name.startsWith("#") ? name.slice(1) : name;
 
-          // Decide whether this should be a generator function (keeps `yield`)
-          // or an async function (uses `await`). If the method body contains
-          // `yield` we create a generator `function*`, otherwise an `async`
-          // function so `await` works as expected.
-          // Always create generator methods so they interoperate with the
-          // TurboWarp compiler/scheduler; generator functions yield to the
-          // scheduler for opcode compatibility.
-          // Ensure `thread` is the first named parameter so the function
-          // can be executed on any thread without relying on outer
-          // closures. Subsequent params are the declared method params.
-          const factoryParams = ['thread'].concat(params).join(',');
-          const factorySrc = '(function*(' + factoryParams + ') {' + body + '})';
-          const factory = new Function(...envNames, 'return ' + factorySrc);
+          // Rewrite env names to unique closure parameters so the generated
+          // method source does not still depend on compile-time temporary names.
+          const safeParamNames = envNames.map((envName, idx) => `__jsoop_env_${idx}__`);
+          for (let i = 0; i < envNames.length; i++) {
+            const envName = envNames[i];
+            const safeName = safeParamNames[i];
+            const re = new RegExp("\\b" + escapeRegExp(envName) + "\\b", "g");
+            body = body.replace(re, safeName);
+          }
+
+          // Always create factory methods so they interoperate with the
+          // TurboWarp compiler/scheduler and receive a cloned thread with
+          // named JSOOP args instead of positional block args.
+          const factorySrc =
+            "(function(thread" +
+            (params.length ? ", " + params.join(",") : "") +
+            ") { return (function*() {" +
+            body +
+            "}); })";
+          const factory = new Function(...safeParamNames, "return " + factorySrc);
           const fn = factory(...envValues);
-          try { Object.defineProperty(fn, '_jsoopMethod', { value: true, writable: false, configurable: true }); } catch (_) { /* ignore */ }
+          try {
+            Object.defineProperty(fn, "_jsoopMethod", { value: true, writable: false, configurable: true });
+            Object.defineProperty(fn, "_jsoopFactory", { value: true, writable: false, configurable: true });
+            Object.defineProperty(fn, "_jsoopParams", {
+              value: params.slice(),
+              writable: false,
+              configurable: true,
+            });
+          } catch (_) {
+            /* ignore */
+          }
 
-          if (type.includes('static')) {
+          if (type.includes("static")) {
             Object.defineProperty(C, cleanName, { value: fn, writable: true, configurable: true });
-          } else if (type.includes('getter') || type.includes('setter')) {
+          } else if (type.includes("getter") || type.includes("setter")) {
             const desc = {};
-            if (type.includes('getter')) desc.get = fn;
-            if (type.includes('setter')) desc.set = fn;
+            if (type.includes("getter")) desc.get = fn;
+            if (type.includes("setter")) desc.set = fn;
             Object.defineProperty(C.prototype, cleanName, desc);
           } else {
             Object.defineProperty(C.prototype, cleanName, { value: fn, writable: true, configurable: true });
@@ -806,9 +903,72 @@
 
         return C;
       } catch (e) {
-        console.error('_makeClassFromMethods failed', e);
-        return function() {};
+        console.error("_makeClassFromMethods failed", e);
+        return function () {};
       }
+    }
+
+    _isJsoopFactory(fn) {
+      return typeof fn === "function" && fn._jsoopFactory === true;
+    }
+
+    _getJsoopParamNames(fn) {
+      if (!fn || !Array.isArray(fn._jsoopParams)) return [];
+      return fn._jsoopParams.map((param) => {
+        const name = String(param || "").trim();
+        const match = name.match(/^\.{0,3}\s*([A-Za-z_$][\w$]*)/);
+        return match ? match[1] : null;
+      });
+    }
+
+    _isGeneratorFunction(fn) {
+      return typeof fn === "function" && fn.constructor && fn.constructor.name === "GeneratorFunction";
+    }
+
+    async _runJsoopGenerator(genOrFunc) {
+      let iterator;
+      if (typeof genOrFunc === "function") {
+        iterator = genOrFunc();
+      } else {
+        iterator = genOrFunc;
+      }
+      if (!iterator || typeof iterator.next !== "function") return iterator;
+
+      let result = await iterator.next();
+      while (!result.done) {
+        try {
+          const value = await result.value;
+          result = await iterator.next(value);
+        } catch (e) {
+          result = await iterator.throw(e);
+        }
+      }
+      return result.value;
+    }
+
+    async _invokeJsoopFactory(fn, thisArg, thread, args) {
+      const clonedThread = thread && typeof thread.clone === "function" ? thread.clone() : thread;
+      const paramNames = this._getJsoopParamNames(fn);
+      const defaults = fn && fn._jsoopDefaults ? fn._jsoopDefaults : {};
+      const argObject = {};
+      for (let i = 0; i < paramNames.length; i++) {
+        const key = paramNames[i] || String(i);
+        const value = i < args.length ? args[i] : undefined;
+        argObject[key] = value === undefined && Object.prototype.hasOwnProperty.call(defaults, key) ? defaults[key] : value;
+      }
+      if (clonedThread) clonedThread.jsoopArgs = argObject;
+
+      const factoryResult = fn.apply(thisArg, [clonedThread].concat(args));
+      if (typeof factoryResult === "function" && this._isGeneratorFunction(factoryResult)) {
+        return await this._runJsoopGenerator(() => factoryResult.apply(thisArg));
+      }
+      if (factoryResult && typeof factoryResult.next === "function") {
+        return await this._runJsoopGenerator(factoryResult);
+      }
+      if (factoryResult && typeof factoryResult.then === "function") {
+        return await factoryResult;
+      }
+      return factoryResult;
     }
 
     getInfo() {
@@ -827,8 +987,8 @@
             CODE: {
               type: Scratch.ArgumentType.CUSTOM,
               id: "jsoop-codeEditor",
-              defaultValue: "jsoop-init-xyz789@!"
-            }
+              defaultValue: "jsoop-init-xyz789@!",
+            },
           },
         },
         {
@@ -841,47 +1001,47 @@
           disableMonitor: true,
         },
         {
-          opcode: 'evalJS',
+          opcode: "evalJS",
           color1: "#6b8cff",
           color2: "#6b8cff",
           color3: "#6b8cff",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'eval JS [CODE]',
+          text: "eval JS [CODE]",
           arguments: {
             CODE: {
-              fillIn: "codeInput"
-            }
+              fillIn: "codeInput",
+            },
           },
-          ...JSObjectDescriptor.Block
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'runJS',
+          opcode: "runJS",
           color1: "#6b8cff",
           color2: "#6b8cff",
           color3: "#6b8cff",
           blockType: Scratch.BlockType.COMMAND,
-          text: 'run JS [CODE]',
+          text: "run JS [CODE]",
           arguments: {
             CODE: {
-              fillIn: "codeInput"
-            }
-          }
+              fillIn: "codeInput",
+            },
+          },
         },
         {
-          opcode: 'jsCommand',
-          text: 'run [CODE]',
+          opcode: "jsCommand",
+          text: "run [CODE]",
           blockType: Scratch.BlockType.COMMAND,
           hideFromPalette: isScratchBlocksReady && !isSafari,
           arguments: {
             CODE: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: `console.log("Hello!")`
-            }
-          }
+              defaultValue: `console.log("Hello!")`,
+            },
+          },
         },
         {
-          opcode: 'jsReporter',
-          text: 'run [CODE]',
+          opcode: "jsReporter",
+          text: "run [CODE]",
           blockType: Scratch.BlockType.REPORTER,
           disableMonitor: true,
           allowDropAnywhere: true,
@@ -889,30 +1049,30 @@
           arguments: {
             CODE: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'Math.random()'
-            }
-          }
+              defaultValue: "Math.random()",
+            },
+          },
         },
         {
           opcode: "functionHatNotice",
           blockType: Scratch.BlockType.BUTTON,
-          text: "Notice, read me!"
+          text: "Notice, read me!",
         },
         {
-          opcode: 'functionHat',
-          text: 'when function [LABEL] is called [ARGS]',
+          opcode: "functionHat",
+          text: "when function [LABEL] is called [ARGS]",
           blockType: Scratch.BlockType.HAT,
           isEdgeActivated: false,
           hideFromPalette: true,
           arguments: {
             LABEL: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'myFunction',
+              defaultValue: "myFunction",
             },
             ARGS: {
-              fillIn: "argsReporter"
-            }
-          }
+              fillIn: "argsReporter",
+            },
+          },
         },
         {
           blockType: Scratch.BlockType.XML,
@@ -927,19 +1087,19 @@
           </block>
           </next>
           </block>
-          `
+          `,
         },
         {
-          opcode: 'functionReporter',
-          text: 'generate function for label [LABEL]',
+          opcode: "functionReporter",
+          text: "generate function for label [LABEL]",
           blockType: Scratch.BlockType.REPORTER,
           arguments: {
             LABEL: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'myFunction',
-            }
+              defaultValue: "myFunction",
+            },
           },
-          ...JSObjectDescriptor.Block
+          ...JSObjectDescriptor.Block,
         },
         {
           opcode: "returnDataString",
@@ -950,8 +1110,8 @@
           arguments: {
             DATA: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: "foobar"
-            }
+              defaultValue: "foobar",
+            },
           },
         },
         {
@@ -962,16 +1122,18 @@
           text: "return [DATA]",
           arguments: {
             DATA: {
-              ...(vm.dogeiscutObject ? {
-                ...vm.dogeiscutObject.Argument,
-              } : {
-                ...({
-                  shape: 5,
-                  exemptFromNormalization: true,
-                  check: ["Object"]
-                })
-              }),
-              defaultValue: vm.dogeiscutObject ? vm.dogeiscutObject.Type.defaultValue : undefined
+              ...(vm.dogeiscutObject
+                ? {
+                    ...vm.dogeiscutObject.Argument,
+                  }
+                : {
+                    ...{
+                      shape: 5,
+                      exemptFromNormalization: true,
+                      check: ["Object"],
+                    },
+                  }),
+              defaultValue: vm.dogeiscutObject ? vm.dogeiscutObject.Type.defaultValue : undefined,
             },
           },
         },
@@ -984,8 +1146,8 @@
           arguments: {
             DATA: {
               ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
+              defaultValue: new jwArray.Type([]),
+            },
           },
         },
         {
@@ -995,540 +1157,635 @@
           hideFromPalette: false,
           text: "return [DATA]",
           arguments: {
-            DATA: JSObjectDescriptor.Argument
+            DATA: JSObjectDescriptor.Argument,
           },
         },
         {
-          opcode: 'new',
+          opcode: "new",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'new [CONSTRUCTOR] with args [ARGS]',
+          text: "new [CONSTRUCTOR] with args [ARGS]",
           arguments: {
             CONSTRUCTOR: JSObjectDescriptor.Argument,
             ARGS: {
               ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
+              defaultValue: new jwArray.Type([]),
+            },
           },
-          ...JSObjectDescriptor.Block
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'callMethod',
+          opcode: "callMethod",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'call method [METHOD] on [INSTANCE] with args [ARGS]',
+          text: "call method [METHOD] on [INSTANCE] with args [ARGS]",
           arguments: {
             METHOD: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'toString',
-              exemptFromNormalization: true
+              defaultValue: "toString",
+              exemptFromNormalization: true,
             },
             INSTANCE: JSObjectDescriptor.Argument,
             ARGS: {
               ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
+              defaultValue: new jwArray.Type([]),
+            },
           },
-          ...JSObjectDescriptor.Block
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'awaitCallMethod',
+          opcode: "awaitCallMethod",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'await call method [METHOD] on [INSTANCE] with args [ARGS]',
+          text: "await call method [METHOD] on [INSTANCE] with args [ARGS]",
           arguments: {
             METHOD: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'then',
-              exemptFromNormalization: true
+              defaultValue: "then",
+              exemptFromNormalization: true,
             },
             INSTANCE: JSObjectDescriptor.Argument,
             ARGS: {
               ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
+              defaultValue: new jwArray.Type([]),
+            },
           },
-          ...JSObjectDescriptor.Block
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'runMethod',
+          opcode: "runMethod",
           blockType: Scratch.BlockType.COMMAND,
-          text: 'run method [METHOD] on [INSTANCE] with args [ARGS]',
+          text: "run method [METHOD] on [INSTANCE] with args [ARGS]",
           arguments: {
             METHOD: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'setName',
-              exemptFromNormalization: true
+              defaultValue: "setName",
+              exemptFromNormalization: true,
             },
             INSTANCE: JSObjectDescriptor.Argument,
             ARGS: {
               ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
-          }
+              defaultValue: new jwArray.Type([]),
+            },
+          },
         },
         {
-          opcode: 'awaitRunMethod',
+          opcode: "awaitRunMethod",
           blockType: Scratch.BlockType.COMMAND,
-          text: 'await run method [METHOD] on [INSTANCE] with args [ARGS]',
+          text: "await run method [METHOD] on [INSTANCE] with args [ARGS]",
           arguments: {
             METHOD: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'then',
-              exemptFromNormalization: true
+              defaultValue: "then",
+              exemptFromNormalization: true,
             },
             INSTANCE: JSObjectDescriptor.Argument,
             ARGS: {
               ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
-          }
-        },
-        {
-          opcode: 'callFunction',
-          blockType: Scratch.BlockType.REPORTER,
-          text: 'call function [FUNC] with this [THIS] args [ARGS]',
-          arguments: {
-            FUNC: JSObjectDescriptor.Argument,
-            THIS: {
-              ...(vm.dogeiscutObject ? {
-                ...vm.dogeiscutObject.Argument,
-              } : {
-                ...({
-                  shape: 5,
-                  exemptFromNormalization: true,
-                  check: ["Object"]
-                })
-              }),
-              defaultValue: vm.dogeiscutObject ? vm.dogeiscutObject.Type.defaultValue : undefined
+              defaultValue: new jwArray.Type([]),
             },
-            ARGS: {
-              ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
           },
-          ...JSObjectDescriptor.Block
         },
         {
-          opcode: 'awaitCallFunction',
+          opcode: "callFunction",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'await call function [FUNC] with this [THIS] args [ARGS]',
+          text: "call function [FUNC] with this [THIS] args [ARGS]",
           arguments: {
             FUNC: JSObjectDescriptor.Argument,
             THIS: {
-              ...(vm.dogeiscutObject ? {
-                ...vm.dogeiscutObject.Argument,
-              } : {
-                ...({
-                  shape: 5,
-                  exemptFromNormalization: true,
-                  check: ["Object"]
-                })
-              }),
-              defaultValue: vm.dogeiscutObject ? vm.dogeiscutObject.Type.defaultValue : undefined
+              ...(vm.dogeiscutObject
+                ? {
+                    ...vm.dogeiscutObject.Argument,
+                  }
+                : {
+                    ...{
+                      shape: 5,
+                      exemptFromNormalization: true,
+                      check: ["Object"],
+                    },
+                  }),
+              defaultValue: vm.dogeiscutObject ? vm.dogeiscutObject.Type.defaultValue : undefined,
             },
             ARGS: {
               ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
+              defaultValue: new jwArray.Type([]),
+            },
           },
-          ...JSObjectDescriptor.Block
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'runFunction',
-          blockType: Scratch.BlockType.COMMAND,
-          text: 'run function [FUNC] with this [THIS] args [ARGS]',
-          arguments: {
-            FUNC: JSObjectDescriptor.Argument,
-            THIS: {
-              ...(vm.dogeiscutObject ? {
-                ...vm.dogeiscutObject.Argument,
-              } : {
-                ...({
-                  shape: 5,
-                  exemptFromNormalization: true,
-                  check: ["Object"]
-                })
-              }),
-              defaultValue: vm.dogeiscutObject ? vm.dogeiscutObject.Type.defaultValue : undefined
-            },
-            ARGS: {
-              ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
-          }
-        },
-        {
-          opcode: 'awaitRunFunction',
-          blockType: Scratch.BlockType.COMMAND,
-          text: 'await run function [FUNC] with this [THIS] args [ARGS]',
-          arguments: {
-            FUNC: JSObjectDescriptor.Argument,
-            THIS: {
-              ...(vm.dogeiscutObject ? {
-                ...vm.dogeiscutObject.Argument,
-              } : {
-                ...({
-                  shape: 5,
-                  exemptFromNormalization: true,
-                  check: ["Object"]
-                })
-              }),
-              defaultValue: vm.dogeiscutObject ? vm.dogeiscutObject.Type.defaultValue : undefined
-            },
-            ARGS: {
-              ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
-          }
-        },
-        {
-          opcode: 'getProp',
+          opcode: "awaitCallFunction",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'get property [PROP] of [INSTANCE]',
+          text: "await call function [FUNC] with this [THIS] args [ARGS]",
+          arguments: {
+            FUNC: JSObjectDescriptor.Argument,
+            THIS: {
+              ...(vm.dogeiscutObject
+                ? {
+                    ...vm.dogeiscutObject.Argument,
+                  }
+                : {
+                    ...{
+                      shape: 5,
+                      exemptFromNormalization: true,
+                      check: ["Object"],
+                    },
+                  }),
+              defaultValue: vm.dogeiscutObject ? vm.dogeiscutObject.Type.defaultValue : undefined,
+            },
+            ARGS: {
+              ...jwArray.Argument,
+              defaultValue: new jwArray.Type([]),
+            },
+          },
+          ...JSObjectDescriptor.Block,
+        },
+        {
+          opcode: "runFunction",
+          blockType: Scratch.BlockType.COMMAND,
+          text: "run function [FUNC] with this [THIS] args [ARGS]",
+          arguments: {
+            FUNC: JSObjectDescriptor.Argument,
+            THIS: {
+              ...(vm.dogeiscutObject
+                ? {
+                    ...vm.dogeiscutObject.Argument,
+                  }
+                : {
+                    ...{
+                      shape: 5,
+                      exemptFromNormalization: true,
+                      check: ["Object"],
+                    },
+                  }),
+              defaultValue: vm.dogeiscutObject ? vm.dogeiscutObject.Type.defaultValue : undefined,
+            },
+            ARGS: {
+              ...jwArray.Argument,
+              defaultValue: new jwArray.Type([]),
+            },
+          },
+        },
+        {
+          opcode: "awaitRunFunction",
+          blockType: Scratch.BlockType.COMMAND,
+          text: "await run function [FUNC] with this [THIS] args [ARGS]",
+          arguments: {
+            FUNC: JSObjectDescriptor.Argument,
+            THIS: {
+              ...(vm.dogeiscutObject
+                ? {
+                    ...vm.dogeiscutObject.Argument,
+                  }
+                : {
+                    ...{
+                      shape: 5,
+                      exemptFromNormalization: true,
+                      check: ["Object"],
+                    },
+                  }),
+              defaultValue: vm.dogeiscutObject ? vm.dogeiscutObject.Type.defaultValue : undefined,
+            },
+            ARGS: {
+              ...jwArray.Argument,
+              defaultValue: new jwArray.Type([]),
+            },
+          },
+        },
+        {
+          opcode: "getProp",
+          blockType: Scratch.BlockType.REPORTER,
+          text: "get property [PROP] of [INSTANCE]",
           allowDropAnywhere: true,
           arguments: {
             PROP: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'name',
-              exemptFromNormalization: true
+              defaultValue: "name",
+              exemptFromNormalization: true,
             },
-            INSTANCE: JSObjectDescriptor.Argument
-          }
+            INSTANCE: JSObjectDescriptor.Argument,
+          },
         },
         {
-          opcode: 'stringify',
+          opcode: "stringify",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'JSON stringify [VALUE]',
+          text: "JSON stringify [VALUE]",
           arguments: {
             VALUE: {
               type: Scratch.ArgumentType.STRING,
               defaultValue: '{"a":1}',
-              exemptFromNormalization: true
-            }
-          }
+              exemptFromNormalization: true,
+            },
+          },
         },
         {
-          opcode: 'typeName',
+          opcode: "typeName",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'type name of [INSTANCE]',
+          text: "type name of [INSTANCE]",
           arguments: {
-            INSTANCE: JSObjectDescriptor.Argument
-          }
+            INSTANCE: JSObjectDescriptor.Argument,
+          },
         },
         {
-          opcode: 'toNative',
+          opcode: "toNative",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Convert to native JavaScript value [VALUE]',
+          text: "Convert to native JavaScript value [VALUE]",
           allowDropAnywhere: true,
           arguments: {
-            VALUE: JSObjectDescriptor.Argument
-          }
+            VALUE: JSObjectDescriptor.Argument,
+          },
         },
         {
-          opcode: 'separator2',
+          opcode: "separator2",
           blockType: Scratch.BlockType.LABEL,
-          text: 'Property Changing Blocks'
+          text: "Property Changing Blocks",
         },
         {
           opcode: "propSettingNotice",
           blockType: Scratch.BlockType.BUTTON,
-          text: "Notice, read me!"
+          text: "Notice, read me!",
         },
         {
-          opcode: 'setPropString',
+          opcode: "setPropString",
           blockType: Scratch.BlockType.COMMAND,
-          text: 'set property [PROP] of [INSTANCE] to string [VALUE]',
+          text: "set property [PROP] of [INSTANCE] to string [VALUE]",
           arguments: {
             PROP: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'name',
-              exemptFromNormalization: true
+              defaultValue: "name",
+              exemptFromNormalization: true,
             },
             INSTANCE: JSObjectDescriptor.Argument,
             VALUE: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'Bob'
-            }
-          }
+              defaultValue: "Bob",
+            },
+          },
         },
         {
-          opcode: 'setPropJSObject',
+          opcode: "setPropJSObject",
           blockType: Scratch.BlockType.COMMAND,
-          text: 'set property [PROP] of [INSTANCE] to JavaScript Object [VALUE]',
+          text: "set property [PROP] of [INSTANCE] to JavaScript Object [VALUE]",
           arguments: {
             PROP: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'data',
-              exemptFromNormalization: true
+              defaultValue: "data",
+              exemptFromNormalization: true,
             },
             INSTANCE: JSObjectDescriptor.Argument,
-            VALUE: JSObjectDescriptor.Argument
-          }
+            VALUE: JSObjectDescriptor.Argument,
+          },
         },
         {
-          opcode: 'setPropJwArray',
+          opcode: "setPropJwArray",
           blockType: Scratch.BlockType.COMMAND,
-          text: 'set property [PROP] of [INSTANCE] to Array [VALUE]',
+          text: "set property [PROP] of [INSTANCE] to Array [VALUE]",
           arguments: {
             PROP: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'items',
-              exemptFromNormalization: true
+              defaultValue: "items",
+              exemptFromNormalization: true,
             },
             INSTANCE: JSObjectDescriptor.Argument,
             VALUE: {
               ...jwArray.Argument,
-              defaultValue: new jwArray.Type([])
-            }
-          }
+              defaultValue: new jwArray.Type([]),
+            },
+          },
         },
         {
-          opcode: 'setPropDogeiscutObject',
+          opcode: "setPropDogeiscutObject",
           blockType: Scratch.BlockType.COMMAND,
-          text: 'set property [PROP] of [INSTANCE] to Object [VALUE]',
+          text: "set property [PROP] of [INSTANCE] to Object [VALUE]",
           arguments: {
             PROP: {
               type: Scratch.ArgumentType.STRING,
-              defaultValue: 'config',
-              exemptFromNormalization: true
+              defaultValue: "config",
+              exemptFromNormalization: true,
             },
             INSTANCE: JSObjectDescriptor.Argument,
-            VALUE: vm.dogeiscutObject ? {
-              ...vm.dogeiscutObject.Argument,
-            } : {
-              ...({
-                shape: 5,
-                exemptFromNormalization: true,
-                check: ["Object"]
-              })
-            }
-          }
+            VALUE: vm.dogeiscutObject
+              ? {
+                  ...vm.dogeiscutObject.Argument,
+                }
+              : {
+                  ...{
+                    shape: 5,
+                    exemptFromNormalization: true,
+                    check: ["Object"],
+                  },
+                },
+          },
         },
 
         {
-          opcode: 'seperator0',
+          opcode: "seperator0",
           blockType: Scratch.BlockType.LABEL,
-          text: 'Classes'
+          text: "Classes",
         },
         {
-          opcode: 'classBuilder',
-          text: 'class builder',
+          opcode: "classBuilder",
+          text: "class builder",
           blockType: Scratch.BlockType.REPORTER,
           branches: [{}],
-          ...JSObjectDescriptor.Block
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'classMethod',
-          text: '[METHOD_TYPE] method [NAME] args [ARGS]',
+          opcode: "classMethod",
+          text: "[METHOD_TYPE] method [NAME] args [ARGS]",
           blockType: Scratch.BlockType.COMMAND,
           branches: [{}],
           arguments: {
-            METHOD_TYPE: { type: Scratch.ArgumentType.STRING, menu: 'methodTypeMenu', defaultValue: 'method' },
-            NAME: { type: Scratch.ArgumentType.STRING, defaultValue: 'myMethod' },
-            ARGS: jwArray.Argument
-          }
+            METHOD_TYPE: {
+              type: Scratch.ArgumentType.STRING,
+              menu: "methodTypeMenu",
+              defaultValue: "method",
+            },
+            NAME: { type: Scratch.ArgumentType.STRING, defaultValue: "myMethod" },
+            ARGS: jwArray.Argument,
+          },
         },
         {
-          opcode: 'classThis',
-          text: 'this',
+          opcode: "classArg",
+          text: "arg [NAME]",
+          blockType: Scratch.BlockType.REPORTER,
+          arguments: {
+            NAME: { type: Scratch.ArgumentType.STRING, defaultValue: "x" },
+          },
+        },
+        {
+          opcode: "classArgString",
+          text: "arg [NAME] default string [DEFAULT]",
+          blockType: Scratch.BlockType.REPORTER,
+          arguments: {
+            NAME: { type: Scratch.ArgumentType.STRING, defaultValue: "x" },
+            DEFAULT: { type: Scratch.ArgumentType.STRING, defaultValue: "hello" },
+          },
+        },
+        {
+          opcode: "classArgNumber",
+          text: "arg [NAME] default number [DEFAULT]",
+          blockType: Scratch.BlockType.REPORTER,
+          arguments: {
+            NAME: { type: Scratch.ArgumentType.STRING, defaultValue: "x" },
+            DEFAULT: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
+          },
+        },
+        {
+          opcode: "classArgDogeiscutObject",
+          text: "arg [NAME] default object [DEFAULT]",
+          blockType: Scratch.BlockType.REPORTER,
+          arguments: {
+            NAME: { type: Scratch.ArgumentType.STRING, defaultValue: "x" },
+            DEFAULT: vm.dogeiscutObject
+              ? {
+                  ...vm.dogeiscutObject.Argument,
+                }
+              : {
+                  shape: 5,
+                  exemptFromNormalization: true,
+                  check: ["Object"],
+                },
+          },
+        },
+        {
+          opcode: "classArgJwArray",
+          text: "arg [NAME] default array [DEFAULT]",
+          blockType: Scratch.BlockType.REPORTER,
+          arguments: {
+            NAME: { type: Scratch.ArgumentType.STRING, defaultValue: "x" },
+            DEFAULT: {
+              ...jwArray.Argument,
+              defaultValue: new jwArray.Type([]),
+            },
+          },
+        },
+        {
+          opcode: "classArgJSObject",
+          text: "arg [NAME] default JSObject [DEFAULT]",
+          blockType: Scratch.BlockType.REPORTER,
+          arguments: {
+            NAME: { type: Scratch.ArgumentType.STRING, defaultValue: "x" },
+            DEFAULT: JSObjectDescriptor.Argument,
+          },
+        },
+        {
+          opcode: "classArgDefault",
+          text: "arg [NAME] default [DEFAULT]",
+          blockType: Scratch.BlockType.REPORTER,
+          arguments: {
+            NAME: { type: Scratch.ArgumentType.STRING, defaultValue: "x" },
+            DEFAULT: { type: Scratch.ArgumentType.STRING, defaultValue: "0" },
+          },
+        },
+        {
+          opcode: "classArgSpread",
+          text: "spread [NAME]",
+          blockType: Scratch.BlockType.REPORTER,
+          arguments: {
+            NAME: { type: Scratch.ArgumentType.STRING, defaultValue: "rest" },
+          },
+        },
+        {
+          opcode: "classThis",
+          text: "this",
           blockType: Scratch.BlockType.REPORTER,
           allowDropAnywhere: true,
           hideFromPalette: false,
-          disableMonitor: true
+          disableMonitor: true,
         },
         {
-          opcode: 'separator1',
+          opcode: "separator1",
           blockType: Scratch.BlockType.LABEL,
-          text: 'Common JavaScript Constants'
+          text: "Common JavaScript Constants",
         },
         {
-          opcode: 'constantMath',
+          opcode: "constantMath",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Math',
-          ...JSObjectDescriptor.Block
+          text: "Math",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantNull',
+          opcode: "constantNull",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'null',
-          ...JSObjectDescriptor.Block
+          text: "null",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantUndefined',
+          opcode: "constantUndefined",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'undefined',
-          ...JSObjectDescriptor.Block
+          text: "undefined",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantObject',
+          opcode: "constantObject",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Object',
-          ...JSObjectDescriptor.Block
+          text: "Object",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantArray',
+          opcode: "constantArray",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Array',
-          ...JSObjectDescriptor.Block
+          text: "Array",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantString',
+          opcode: "constantString",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'String',
-          ...JSObjectDescriptor.Block
+          text: "String",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantNumber',
+          opcode: "constantNumber",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Number',
-          ...JSObjectDescriptor.Block
+          text: "Number",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantBoolean',
+          opcode: "constantBoolean",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Boolean',
-          ...JSObjectDescriptor.Block
+          text: "Boolean",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantFunction',
+          opcode: "constantFunction",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Function',
-          ...JSObjectDescriptor.Block
+          text: "Function",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantAsyncFunction',
+          opcode: "constantAsyncFunction",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'AsyncFunction',
-          ...JSObjectDescriptor.Block
+          text: "AsyncFunction",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantDate',
+          opcode: "constantDate",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Date',
-          ...JSObjectDescriptor.Block
+          text: "Date",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantRegExp',
+          opcode: "constantRegExp",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'RegExp',
-          ...JSObjectDescriptor.Block
+          text: "RegExp",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantJSON',
+          opcode: "constantJSON",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'JSON',
-          ...JSObjectDescriptor.Block
+          text: "JSON",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantPromise',
+          opcode: "constantPromise",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Promise',
-          ...JSObjectDescriptor.Block
+          text: "Promise",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantError',
+          opcode: "constantError",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Error',
-          ...JSObjectDescriptor.Block
+          text: "Error",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantMap',
+          opcode: "constantMap",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Map',
-          ...JSObjectDescriptor.Block
+          text: "Map",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantSet',
+          opcode: "constantSet",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Set',
-          ...JSObjectDescriptor.Block
+          text: "Set",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantWeakMap',
+          opcode: "constantWeakMap",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'WeakMap',
-          ...JSObjectDescriptor.Block
+          text: "WeakMap",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantWeakSet',
+          opcode: "constantWeakSet",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'WeakSet',
-          ...JSObjectDescriptor.Block
+          text: "WeakSet",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantSymbol',
+          opcode: "constantSymbol",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Symbol',
-          ...JSObjectDescriptor.Block
+          text: "Symbol",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantProxy',
+          opcode: "constantProxy",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Proxy',
-          ...JSObjectDescriptor.Block
+          text: "Proxy",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantReflect',
+          opcode: "constantReflect",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Reflect',
-          ...JSObjectDescriptor.Block
+          text: "Reflect",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantIntl',
+          opcode: "constantIntl",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Intl',
-          ...JSObjectDescriptor.Block
+          text: "Intl",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantConsole',
+          opcode: "constantConsole",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'console',
-          ...JSObjectDescriptor.Block
+          text: "console",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantGlobalThis',
+          opcode: "constantGlobalThis",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'globalThis',
-          ...JSObjectDescriptor.Block
+          text: "globalThis",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantInfinity',
+          opcode: "constantInfinity",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'Infinity',
-          ...JSObjectDescriptor.Block
+          text: "Infinity",
+          ...JSObjectDescriptor.Block,
         },
         {
-          opcode: 'constantNaN',
+          opcode: "constantNaN",
           blockType: Scratch.BlockType.REPORTER,
-          text: 'NaN',
-          ...JSObjectDescriptor.Block
+          text: "NaN",
+          ...JSObjectDescriptor.Block,
         },
       ];
 
       return {
-        id: 'jsoop',
-        name: 'JS OOP',
-        color1: '#6b8cff',
-        color2: '#4968d9',
-        color3: '#334fb7',
+        id: "jsoop",
+        name: "JS OOP",
+        color1: "#6b8cff",
+        color2: "#4968d9",
+        color3: "#334fb7",
         blocks: blocks,
         menus: {
           methodTypeMenu: {
             acceptReporters: false,
             items: [
-              'method',
-              'static method',
-              'getter',
-              'setter',
-              'async method',
-              'async static method',
-              'private method',
-              'private static method',
-              'private getter',
-              'private setter',
-              'private async method',
-              'private async static method'
-            ]
-          }
-        }
+              "method",
+              "static method",
+              "getter",
+              "setter",
+              "async method",
+              "async static method",
+              "private method",
+              "private static method",
+              "private getter",
+              "private setter",
+              "private async method",
+              "private async static method",
+            ],
+          },
+        },
       };
     }
 
@@ -1537,85 +1794,278 @@
         ir: {
           classBuilder: (generator, block) => {
             generator.script.yields = true;
-            return { kind: 'input', substack: generator.descendSubstack(block, 'SUBSTACK') };
+            return { kind: "input", substack: generator.descendSubstack(block, "SUBSTACK") };
           },
           classMethod: (generator, block) => {
             return {
-              kind: 'stack',
+              kind: "stack",
               type: block.fields.METHOD_TYPE.value,
-              name: generator.descendInputOfBlock(block, 'NAME'),
-              args: generator.descendInputOfBlock(block, 'ARGS'),
-              substack: generator.descendSubstack(block, 'SUBSTACK')
+              name: generator.descendInputOfBlock(block, "NAME"),
+              args: generator.descendInputOfBlock(block, "ARGS"),
+              substack: generator.descendSubstack(block, "SUBSTACK"),
             };
           },
-          new: (generator, block) => ({
-            kind: 'input',
-            CONSTRUCTOR: generator.descendInputOfBlock(block, 'CONSTRUCTOR'),
-            ARGS: generator.descendInputOfBlock(block, 'ARGS')
+          new: (generator, block) => {
+            generator.script.yields = true;
+            return {
+              kind: "input",
+              CONSTRUCTOR: generator.descendInputOfBlock(block, "CONSTRUCTOR"),
+              ARGS: generator.descendInputOfBlock(block, "ARGS"),
+            };
+          },
+          classThis: (generator, block) => ({ kind: "input" }),
+          returnDataString: (generator, block) => ({
+            kind: "stack",
+            DATA: generator.descendInputOfBlock(block, "DATA"),
           }),
-          classThis: (generator, block) => ({ kind: 'input' }),
-          returnDataString: (generator, block) => ({ kind: 'stack', DATA: generator.descendInputOfBlock(block, 'DATA') }),
-          returnDataObject: (generator, block) => ({ kind: 'stack', DATA: generator.descendInputOfBlock(block, 'DATA') }),
-          returnDataArray: (generator, block) => ({ kind: 'stack', DATA: generator.descendInputOfBlock(block, 'DATA') }),
-          returnDataJsObject: (generator, block) => ({ kind: 'stack', DATA: generator.descendInputOfBlock(block, 'DATA') }),
-          argsReporter: (generator, block) => ({ kind: 'input' }),
-          awaitCallMethod: (generator, block) => ({
-            kind: 'input',
-            METHOD: generator.descendInputOfBlock(block, 'METHOD'),
-            INSTANCE: generator.descendInputOfBlock(block, 'INSTANCE'),
-            ARGS: generator.descendInputOfBlock(block, 'ARGS')
+          returnDataObject: (generator, block) => ({
+            kind: "stack",
+            DATA: generator.descendInputOfBlock(block, "DATA"),
           }),
-          awaitRunMethod: (generator, block) => ({
-            kind: 'stack',
-            METHOD: generator.descendInputOfBlock(block, 'METHOD'),
-            INSTANCE: generator.descendInputOfBlock(block, 'INSTANCE'),
-            ARGS: generator.descendInputOfBlock(block, 'ARGS')
+          returnDataArray: (generator, block) => ({
+            kind: "stack",
+            DATA: generator.descendInputOfBlock(block, "DATA"),
           }),
-          awaitCallFunction: (generator, block) => ({
-            kind: 'input',
-            FUNC: generator.descendInputOfBlock(block, 'FUNC'),
-            THIS: generator.descendInputOfBlock(block, 'THIS'),
-            ARGS: generator.descendInputOfBlock(block, 'ARGS')
+          returnDataJsObject: (generator, block) => ({
+            kind: "stack",
+            DATA: generator.descendInputOfBlock(block, "DATA"),
           }),
-          awaitRunFunction: (generator, block) => ({
-            kind: 'stack',
-            FUNC: generator.descendInputOfBlock(block, 'FUNC'),
-            THIS: generator.descendInputOfBlock(block, 'THIS'),
-            ARGS: generator.descendInputOfBlock(block, 'ARGS')
-          })
+          argsReporter: (generator, block) => ({ kind: "input" }),
+          classArg: (generator, block) => ({ kind: "input", NAME: generator.descendInputOfBlock(block, "NAME") }),
+          classArgString: (generator, block) => ({ kind: "input", NAME: generator.descendInputOfBlock(block, "NAME"), DEFAULT: generator.descendInputOfBlock(block, "DEFAULT") }),
+          classArgNumber: (generator, block) => ({ kind: "input", NAME: generator.descendInputOfBlock(block, "NAME"), DEFAULT: generator.descendInputOfBlock(block, "DEFAULT") }),
+          classArgDogeiscutObject: (generator, block) => ({ kind: "input", NAME: generator.descendInputOfBlock(block, "NAME"), DEFAULT: generator.descendInputOfBlock(block, "DEFAULT") }),
+          classArgJwArray: (generator, block) => ({ kind: "input", NAME: generator.descendInputOfBlock(block, "NAME"), DEFAULT: generator.descendInputOfBlock(block, "DEFAULT") }),
+          classArgJSObject: (generator, block) => ({ kind: "input", NAME: generator.descendInputOfBlock(block, "NAME"), DEFAULT: generator.descendInputOfBlock(block, "DEFAULT") }),
+          classArgDefault: (generator, block) => ({ kind: "input", NAME: generator.descendInputOfBlock(block, "NAME"), DEFAULT: generator.descendInputOfBlock(block, "DEFAULT") }),
+          classArgSpread: (generator, block) => ({ kind: "input", NAME: generator.descendInputOfBlock(block, "NAME") }),
+          constantMath: (generator, block) => ({ kind: "input" }),
+          constantNull: (generator, block) => ({ kind: "input" }),
+          constantUndefined: (generator, block) => ({ kind: "input" }),
+          constantObject: (generator, block) => ({ kind: "input" }),
+          constantArray: (generator, block) => ({ kind: "input" }),
+          constantString: (generator, block) => ({ kind: "input" }),
+          constantNumber: (generator, block) => ({ kind: "input" }),
+          constantBoolean: (generator, block) => ({ kind: "input" }),
+          constantFunction: (generator, block) => ({ kind: "input" }),
+          constantAsyncFunction: (generator, block) => ({ kind: "input" }),
+          constantDate: (generator, block) => ({ kind: "input" }),
+          constantRegExp: (generator, block) => ({ kind: "input" }),
+          constantJSON: (generator, block) => ({ kind: "input" }),
+          constantPromise: (generator, block) => ({ kind: "input" }),
+          constantError: (generator, block) => ({ kind: "input" }),
+          constantMap: (generator, block) => ({ kind: "input" }),
+          constantSet: (generator, block) => ({ kind: "input" }),
+          constantWeakMap: (generator, block) => ({ kind: "input" }),
+          constantWeakSet: (generator, block) => ({ kind: "input" }),
+          constantSymbol: (generator, block) => ({ kind: "input" }),
+          constantProxy: (generator, block) => ({ kind: "input" }),
+          constantReflect: (generator, block) => ({ kind: "input" }),
+          constantIntl: (generator, block) => ({ kind: "input" }),
+          constantConsole: (generator, block) => ({ kind: "input" }),
+          constantGlobalThis: (generator, block) => ({ kind: "input" }),
+          constantInfinity: (generator, block) => ({ kind: "input" }),
+          constantNaN: (generator, block) => ({ kind: "input" }),
+          callMethod: (generator, block) => {
+            generator.script.yields = true;
+            return {
+              kind: "input",
+              METHOD: generator.descendInputOfBlock(block, "METHOD"),
+              INSTANCE: generator.descendInputOfBlock(block, "INSTANCE"),
+              ARGS: generator.descendInputOfBlock(block, "ARGS"),
+            };
+          },
+          runMethod: (generator, block) => {
+            generator.script.yields = true;
+            return {
+              kind: "stack",
+              METHOD: generator.descendInputOfBlock(block, "METHOD"),
+              INSTANCE: generator.descendInputOfBlock(block, "INSTANCE"),
+              ARGS: generator.descendInputOfBlock(block, "ARGS"),
+            };
+          },
+          callFunction: (generator, block) => {
+            generator.script.yields = true;
+            return {
+              kind: "input",
+              FUNC: generator.descendInputOfBlock(block, "FUNC"),
+              THIS: generator.descendInputOfBlock(block, "THIS"),
+              ARGS: generator.descendInputOfBlock(block, "ARGS"),
+            };
+          },
+          runFunction: (generator, block) => {
+            generator.script.yields = true;
+            return {
+              kind: "stack",
+              FUNC: generator.descendInputOfBlock(block, "FUNC"),
+              THIS: generator.descendInputOfBlock(block, "THIS"),
+              ARGS: generator.descendInputOfBlock(block, "ARGS"),
+            };
+          },
+          awaitCallMethod: (generator, block) => {
+            generator.script.yields = true;
+            return {
+              kind: "input",
+              METHOD: generator.descendInputOfBlock(block, "METHOD"),
+              INSTANCE: generator.descendInputOfBlock(block, "INSTANCE"),
+              ARGS: generator.descendInputOfBlock(block, "ARGS"),
+            };
+          },
+          awaitRunMethod: (generator, block) => {
+            generator.script.yields = true;
+            return {
+              kind: "stack",
+              METHOD: generator.descendInputOfBlock(block, "METHOD"),
+              INSTANCE: generator.descendInputOfBlock(block, "INSTANCE"),
+              ARGS: generator.descendInputOfBlock(block, "ARGS"),
+            };
+          },
+          awaitCallFunction: (generator, block) => {
+            generator.script.yields = true;
+            return {
+              kind: "input",
+              FUNC: generator.descendInputOfBlock(block, "FUNC"),
+              THIS: generator.descendInputOfBlock(block, "THIS"),
+              ARGS: generator.descendInputOfBlock(block, "ARGS"),
+            };
+          },
+          awaitRunFunction: (generator, block) => {
+            generator.script.yields = true;
+            return {
+              kind: "stack",
+              FUNC: generator.descendInputOfBlock(block, "FUNC"),
+              THIS: generator.descendInputOfBlock(block, "THIS"),
+              ARGS: generator.descendInputOfBlock(block, "ARGS"),
+            };
+          },
         },
         js: {
           classBuilder: (node, compiler, imports) => {
             const originalSource = compiler.source;
-            compiler.source = '(yield* (function*() {';
+            const methodsVar = compiler.localVariables.next();
+            const sourceVar = compiler.localVariables.next();
+            const paramsVar = compiler.localVariables.next();
+            const typeVar = compiler.localVariables.next();
+            const isAccessorVar = compiler.localVariables.next();
+            const fnVar = compiler.localVariables.next();
+            const cleanNameVar = compiler.localVariables.next();
+            const descVar = compiler.localVariables.next();
+
+            compiler.source = "(yield* (function*() {";
+            compiler.source += `const waitPromise = function*(promise) {
+`;
+            compiler.source += `  const thread = typeof globalState !== 'undefined' && globalState && globalState.thread ? globalState.thread : thread;
+`;
+            compiler.source += `  let returnValue;
+`;
+            compiler.source += `  let errorReturn;
+`;
+            compiler.source += `  let done = false;
+`;
+            compiler.source += `
+`;
+            compiler.source += `  promise
+`;
+            compiler.source += `    .then(value => {
+`;
+            compiler.source += `      returnValue = value;
+`;
+            compiler.source += `      done = true;
+`;
+            compiler.source += `      thread.status = 0; // STATUS_RUNNING
+`;
+            compiler.source += `    })
+`;
+            compiler.source += `    .catch(error => {
+`;
+            compiler.source += `      errorReturn = error;
+`;
+            compiler.source += `      done = true;
+`;
+            compiler.source += `      thread.status = 0; // STATUS_RUNNING
+`;
+            compiler.source += `    });
+`;
+            compiler.source += `
+`;
+            compiler.source += `  thread.status = 1; // STATUS_PROMISE_WAIT
+`;
+            compiler.source += `  while (!done) {
+`;
+            compiler.source += `    yield;
+`;
+            compiler.source += `  }
+`;
+            compiler.source += `
+`;
+            compiler.source += `  if (errorReturn) throw errorReturn;
+`;
+            compiler.source += `  return returnValue;
+`;
+            compiler.source += `};
+`;
             compiler.source += `thread._jsoopClassStack ??= [];`;
-            compiler.source += `let methods = [];`;
-            compiler.source += `thread._jsoopClassStack.push(methods);`;
+            compiler.source += `let ${methodsVar} = [];`;
+            compiler.source += `thread._jsoopClassStack.push(${methodsVar});`;
 
             if (node.substack) {
               compiler.descendStack(node.substack, new imports.Frame(false, undefined, true));
             }
 
-            compiler.source += `methods = thread._jsoopClassStack.pop();`;
-
-            // Collect environment identifier names (b0, b1, executeInCompatibilityLayer, etc.)
-            // that the method bodies reference so we can pass their runtime values
-            // into the extension-level class factory. This avoids creating methods
-            // that close over the compiler/generator locals.
-            compiler.source += `let envNames = [], envValues = [];`;
-            compiler.source += `const helperCandidates = ['executeInCompatibilityLayer','runtime','stage','vm','Scratch'];`;
-            compiler.source += `for (const m of methods) {`;
-            compiler.source += `  const body = String(m.body || '');`;
-            compiler.source += `  const bMatches = Array.from(new Set(body.match(/\\bb\\d+\\b/g) || []));`;
-            compiler.source += `  for (const n of bMatches) {`;
-            compiler.source += `    if (!envNames.includes(n)) { envNames.push(n); try { envValues.push(eval(n)); } catch(e) { envValues.push(undefined); } }`;
-            compiler.source += `  }`;
-            compiler.source += `  for (const hn of helperCandidates) {`;
-            compiler.source += `    if (body.includes(hn) && !envNames.includes(hn)) { envNames.push(hn); try { envValues.push(eval(hn)); } catch(e) { envValues.push(undefined); } }`;
-            compiler.source += `  }`;
-            compiler.source += `}`;
-
-            compiler.source += `return new vm.runtime.ext_jsoop.JSObject(vm.runtime.ext_jsoop._makeClassFromMethods(methods, envNames, envValues));`;
+            compiler.source += `${methodsVar} = thread._jsoopClassStack.pop();`;
+            compiler.source += `const C = class {};
+`;
+            compiler.source += `for (const m of ${methodsVar}) {
+`;
+            compiler.source += `  const ${sourceVar} = String(m.body || '');
+`;
+            compiler.source += `  const ${paramsVar} = Array.isArray(m.params) ? m.params : [];
+`;
+            compiler.source += `  const ${typeVar} = String(m.type || '');
+`;
+            compiler.source += `  const ${isAccessorVar} = ${typeVar}.includes('getter') || ${typeVar}.includes('setter');
+`;
+            compiler.source += `  const ${fnVar} = ${isAccessorVar}
+`;
+            compiler.source += `    ? (typeof ${sourceVar} === 'string' && /^\\s*(?:async\\s*)?(?:function\\*?|\\(function\\*?)\\b/.test(${sourceVar})
+`;
+            compiler.source += `      ? eval('(' + ${sourceVar} + ')')
+`;
+            compiler.source += `      : eval('(function() {' + ${sourceVar} + '})'))
+`;
+            compiler.source += `    : (typeof ${sourceVar} === 'string' && /^\\s*(?:async\\s*)?(?:function\\b|\\(function\\b)/.test(${sourceVar})
+`;
+            compiler.source += `      ? eval('(' + ${sourceVar} + ')')
+`;
+            compiler.source += `      : eval('(function*(' + ['thread'].concat(${paramsVar}).join(', ') + ') {' + ${sourceVar} + '} )'));
+`;
+            compiler.source += `  try { Object.defineProperty(${fnVar}, '_jsoopFactory', { value: true, writable: false, configurable: true }); Object.defineProperty(${fnVar}, '_jsoopParams', { value: ${paramsVar}.slice(), writable: false, configurable: true }); Object.defineProperty(${fnVar}, '_jsoopDefaults', { value: m.defaults || {}, writable: false, configurable: true }); } catch (e) { }
+`;
+            compiler.source += `  const ${cleanNameVar} = String(m.name || '').startsWith('#') ? String(m.name).slice(1) : String(m.name);
+`;
+            compiler.source += `  if (${typeVar}.includes('static')) {
+`;
+            compiler.source += `    Object.defineProperty(C, ${cleanNameVar}, { value: ${fnVar}, writable: true, configurable: true });
+`;
+            compiler.source += `  } else if (${typeVar}.includes('getter') || ${typeVar}.includes('setter')) {
+`;
+            compiler.source += `    const ${descVar} = {};
+`;
+            compiler.source += `    if (${typeVar}.includes('getter')) ${descVar}.get = ${fnVar};
+`;
+            compiler.source += `    if (${typeVar}.includes('setter')) ${descVar}.set = ${fnVar};
+`;
+            compiler.source += `    Object.defineProperty(C.prototype, ${cleanNameVar}, ${descVar});
+`;
+            compiler.source += `  } else {
+`;
+            compiler.source += `    Object.defineProperty(C.prototype, ${cleanNameVar}, { value: ${fnVar}, writable: true, configurable: true });
+`;
+            compiler.source += `  }
+`;
+            compiler.source += `}
+`;
+            compiler.source += `return new vm.runtime.ext_jsoop.JSObject(C);`;
             compiler.source += `})())`;
 
             const resultSource = compiler.source;
@@ -1625,60 +2075,94 @@
 
           classMethod: (node, compiler, imports) => {
             const oldSource = compiler.source;
-            compiler.source = '';
-            compiler.inClassMethod = true;
+            const oldInClassMethod = compiler.inClassMethod;
 
-            // Try to precompile the substack inline so the resulting code
-            // does not close over compiler-local variables and can be run
-            // in any thread. Fall back to the older descendStack if the
-            // inline method isn't available in this environment.
-            let inlineBody = '';
-            //console.log(node);
-            //console.log("hhh");
-            //alert("hhh");
-            if (node.substack) {
-                
-              if (typeof compiler.descendStackInline === 'function') {
-                inlineBody = compiler.descendStackInline(node.substack, { allowReturns: false, inClassMethod: true });
-              } else {
-                // Fallback: compile into a temporary buffer as before.
-                compiler.descendStack(node.substack, new imports.Frame(false, undefined, true));
-                inlineBody = compiler.source;
+            let factorySource = "";
+
+            if (node.substack && node.substack.length > 0) {
+              try {
+                const child = Object.create(Object.getPrototypeOf(compiler));
+                Object.assign(child, compiler);
+                child.source = "";
+                child.inClassMethod = true;
+                if (child.localVariables && typeof child.localVariables.clone === "function") {
+                  child.localVariables = child.localVariables.clone();
+                }
+
+                const firstBlock = node.substack[0];
+                if (firstBlock && firstBlock.id) {
+                  const test = new vm.exports.Thread(firstBlock.id);
+                  test.target = vm.runtime.targets.find((t) => firstBlock.id in t.blocks._blocks);
+                  if (test.target) {
+                    test.blockContainer = test.target.blocks;
+                    test.pushStack(firstBlock.id);
+                    const ir = new vm.exports.IRGenerator(test).generate();
+                    const jsCompiler = new vm.exports.JSGenerator(ir.entry, ir, test.target);
+                    jsCompiler.inClassMethod = true;
+                    const js = jsCompiler.compile();
+                    if (typeof js === "string" && js.trim()) {
+                      factorySource = js;
+                    } else if (js && typeof js.toString === "function") {
+                      factorySource = js.toString();
+                    }
+                  }
+                }
+
+                if (!factorySource) {
+                  child.descendStack(node.substack, new imports.Frame(false, undefined, true));
+                  factorySource = child.source;
+                }
+              } finally {
+                compiler.source = oldSource;
+                compiler.inClassMethod = oldInClassMethod;
               }
             }
 
-            compiler.source = oldSource;
-            compiler.inClassMethod = false;
-
-            // Methods will receive `thread` as the first named parameter.
-            // Keep a helper `_jsoopMethodArgs` for compatibility with
-            // existing reporters that use the arguments array.
-            const body = 'let _jsoopMethodArgs = Array.from(arguments).slice(1);\n' + inlineBody;
-
             const type = node.type;
             const name = compiler.descendInput(node.name).asString();
-            const argsExpr = compiler.descendInput(node.args).asUnknown();
+            const argsExpr = node.args ? compiler.descendInput(node.args).asUnknown() : "new vm.jwArray.Type([])";
 
             const tempVar = compiler.localVariables.next();
-            compiler.source += `let ${tempVar} = ${argsExpr};\n`;
-            compiler.source += `let params = ${tempVar}.array.map(v => String(v));\n`;
+            const paramsVar = compiler.localVariables.next();
+            const defaultsVar = compiler.localVariables.next();
 
+            compiler.source += `let ${tempVar} = ${argsExpr};\n`;
+            compiler.source += `let ${paramsVar} = [];\n`;
+            compiler.source += `let ${defaultsVar} = {};\n`;
+            compiler.source += `if (${tempVar} instanceof vm.jwArray.Type) {\n`;
+            compiler.source += `  for (const item of ${tempVar}.array) {\n`;
+            compiler.source += `    let argObj = item instanceof vm.runtime.ext_jsoop.JSObject ? item.value : item;\n`;
+            compiler.source += `    if (argObj && typeof argObj === 'object' && argObj._jsoopLookupMarker && argObj.lookupId) {\n`;
+            compiler.source += `      argObj = vm.runtime.ext_jsoop._getFromLookupTable(argObj.lookupId);\n`;
+            compiler.source += `      if (argObj instanceof vm.runtime.ext_jsoop.JSObject) argObj = argObj.value;\n`;
+            compiler.source += `    }\n`;
+            compiler.source += `    if (argObj && typeof argObj === 'object') {\n`;
+            compiler.source += `      const keys = Object.keys(argObj);\n`;
+            compiler.source += `      const key = keys[0];\n`;
+            compiler.source += `      if (key !== undefined) {\n`;
+            compiler.source += `        ${paramsVar}.push(String(key));\n`;
+            compiler.source += `        ${defaultsVar}[String(key)] = argObj[key];\n`;
+            compiler.source += `      }\n`;
+            compiler.source += `    }\n`;
+            compiler.source += `  }\n`;
+            compiler.source += `}\n`;
             compiler.source += `let topStack = thread._jsoopClassStack?.[thread._jsoopClassStack.length-1];\n`;
             compiler.source += `if (topStack) {\n`;
             compiler.source += `  topStack.push({\n`;
             compiler.source += `    name: ${name},\n`;
-            compiler.source += `    params: params,\n`;
-            compiler.source += `    body: ${JSON.stringify(body)},\n`;
+            compiler.source += `    params: ${paramsVar},\n`;
+            compiler.source += `    defaults: ${defaultsVar},\n`;
+            compiler.source += `    body: ${JSON.stringify(factorySource)},\n`;
             compiler.source += `    type: ${JSON.stringify(type)}\n`;
             compiler.source += `  });\n`;
-            compiler.source += `}\n`;
+            compiler.source += `};\n`;
           },
 
           new: (node, compiler, imports) => {
             const ctorExpr = compiler.descendInput(node.CONSTRUCTOR).asUnknown();
             const argsExpr = compiler.descendInput(node.ARGS).asUnknown();
 
-            const source = `(function() {
+            const source = `(yield* (function*() {
       try {
         const ctorWrap = ${ctorExpr};
         let ctor = ctorWrap;
@@ -1700,14 +2184,14 @@
       } catch (e) {
         return new vm.runtime.ext_jsoop.JSObject({ error: String(e) });
       }
-    })()`;
+    })())`;
 
             return new imports.TypedInput(source, imports.TYPE_UNKNOWN);
           },
 
           classThis: (node, compiler, imports) => {
             if (compiler.inClassMethod) {
-              return new imports.TypedInput('this', imports.TYPE_UNKNOWN);
+              return new imports.TypedInput("this", imports.TYPE_UNKNOWN);
             } else {
               return new imports.TypedInput('"this (only works inside class method)"', imports.TYPE_STRING);
             }
@@ -1717,145 +2201,425 @@
             if (compiler.inClassMethod) {
               compiler.source += `return ${compiler.descendInput(node.DATA).asString()};`;
             } else {
-              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asString()}, thread.stopThisScript(), '')`;
+              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asString()}, thread.stopThisScript(), '');`;
             }
           },
           returnDataObject: (node, compiler, imports) => {
             if (compiler.inClassMethod) {
               compiler.source += `return ${compiler.descendInput(node.DATA).asUnknown()};`;
             } else {
-              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '')`;
+              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '');`;
             }
           },
           returnDataArray: (node, compiler, imports) => {
             if (compiler.inClassMethod) {
               compiler.source += `return ${compiler.descendInput(node.DATA).asUnknown()};`;
             } else {
-              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '')`;
+              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '');`;
             }
           },
           returnDataJsObject: (node, compiler, imports) => {
             if (compiler.inClassMethod) {
               compiler.source += `return ${compiler.descendInput(node.DATA).asUnknown()};`;
             } else {
-              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '')`;
+              compiler.source += `(thread.justReported = ${compiler.descendInput(node.DATA).asUnknown()}, thread.stopThisScript(), '');`;
             }
           },
 
           argsReporter: (node, compiler, imports) => {
-            if (compiler.inClassMethod) {
-              return new imports.TypedInput(`new vm.jwArray.Type(_jsoopMethodArgs)`, imports.TYPE_UNKNOWN);
-            } else {
-              return new imports.TypedInput(`thread.jsoopArgs || new vm.runtime.ext_jsoop.JSObject(undefined)`, imports.TYPE_UNKNOWN);
-            }
+            return new imports.TypedInput(
+              `new vm.jwArray.Type(Object.values(thread.jsoopArgs || {}))`,
+              imports.TYPE_UNKNOWN,
+            );
+          },
+          classArg: (node, compiler, imports) => {
+            const name = node.NAME ? compiler.descendInput(node.NAME).asString() : "";
+            const key = JSON.stringify(name);
+            return new imports.TypedInput(`new vm.runtime.ext_jsoop.JSObject({ [${key}]: undefined })`, imports.TYPE_UNKNOWN);
+          },
+          classArgString: (node, compiler, imports) => {
+            const name = node.NAME ? compiler.descendInput(node.NAME).asString() : "";
+            const defaultValue = node.DEFAULT ? compiler.descendInput(node.DEFAULT).asUnknown() : "undefined";
+            const key = JSON.stringify(name);
+            return new imports.TypedInput(`(function(){ const argObj = { [${key}]: ${defaultValue} }; return vm.runtime.ext_jsoop._storeClassArgDefault(argObj); })()`, imports.TYPE_UNKNOWN);
+          },
+          classArgNumber: (node, compiler, imports) => {
+            const name = node.NAME ? compiler.descendInput(node.NAME).asString() : "";
+            const defaultValue = node.DEFAULT ? compiler.descendInput(node.DEFAULT).asUnknown() : "undefined";
+            const key = JSON.stringify(name);
+            return new imports.TypedInput(`(function(){ const argObj = { [${key}]: ${defaultValue} }; return vm.runtime.ext_jsoop._storeClassArgDefault(argObj); })()`, imports.TYPE_UNKNOWN);
+          },
+          classArgDogeiscutObject: (node, compiler, imports) => {
+            const name = node.NAME ? compiler.descendInput(node.NAME).asString() : "";
+            const defaultValue = node.DEFAULT ? compiler.descendInput(node.DEFAULT).asUnknown() : "undefined";
+            const key = JSON.stringify(name);
+            return new imports.TypedInput(`(function(){ const argObj = { [${key}]: ${defaultValue} }; return vm.runtime.ext_jsoop._storeClassArgDefault(argObj); })()`, imports.TYPE_UNKNOWN);
+          },
+          classArgJwArray: (node, compiler, imports) => {
+            const name = node.NAME ? compiler.descendInput(node.NAME).asString() : "";
+            const defaultValue = node.DEFAULT ? compiler.descendInput(node.DEFAULT).asUnknown() : "undefined";
+            const key = JSON.stringify(name);
+            return new imports.TypedInput(`(function(){ const argObj = { [${key}]: ${defaultValue} }; return vm.runtime.ext_jsoop._storeClassArgDefault(argObj); })()`, imports.TYPE_UNKNOWN);
+          },
+          classArgJSObject: (node, compiler, imports) => {
+            const name = node.NAME ? compiler.descendInput(node.NAME).asString() : "";
+            const defaultValue = node.DEFAULT ? compiler.descendInput(node.DEFAULT).asUnknown() : "undefined";
+            const key = JSON.stringify(name);
+            return new imports.TypedInput(`(function(){ const argObj = { [${key}]: ${defaultValue} }; return vm.runtime.ext_jsoop._storeClassArgDefault(argObj); })()`, imports.TYPE_UNKNOWN);
+          },
+          classArgDefault: (node, compiler, imports) => {
+            const name = node.NAME ? compiler.descendInput(node.NAME).asString() : "";
+            const defaultValue = node.DEFAULT ? compiler.descendInput(node.DEFAULT).asUnknown() : "undefined";
+            const key = JSON.stringify(name);
+            return new imports.TypedInput(`(function(){ const argObj = { [${key}]: ${defaultValue} }; return vm.runtime.ext_jsoop._storeClassArgDefault(argObj); })()`, imports.TYPE_UNKNOWN);
+          },
+          classArgSpread: (node, compiler, imports) => {
+            const name = node.NAME ? compiler.descendInput(node.NAME).asString() : "";
+            const key = JSON.stringify(name);
+            return new imports.TypedInput(`new vm.runtime.ext_jsoop.JSObject({ [${key}]: undefined })`, imports.TYPE_UNKNOWN);
+          },
+          constantMath: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Math)", imports.TYPE_UNKNOWN),
+          constantNull: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(null)", imports.TYPE_UNKNOWN),
+          constantUndefined: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(undefined)", imports.TYPE_UNKNOWN),
+          constantObject: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Object)", imports.TYPE_UNKNOWN),
+          constantArray: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Array)", imports.TYPE_UNKNOWN),
+          constantString: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(String)", imports.TYPE_UNKNOWN),
+          constantNumber: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Number)", imports.TYPE_UNKNOWN),
+          constantBoolean: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Boolean)", imports.TYPE_UNKNOWN),
+          constantFunction: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Function)", imports.TYPE_UNKNOWN),
+          constantAsyncFunction: (node, compiler, imports) =>
+            new imports.TypedInput(
+              "new vm.runtime.ext_jsoop.JSObject(Object.getPrototypeOf(async function () {}).constructor)",
+              imports.TYPE_UNKNOWN,
+            ),
+          constantDate: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Date)", imports.TYPE_UNKNOWN),
+          constantRegExp: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(RegExp)", imports.TYPE_UNKNOWN),
+          constantJSON: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(JSON)", imports.TYPE_UNKNOWN),
+          constantPromise: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Promise)", imports.TYPE_UNKNOWN),
+          constantError: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Error)", imports.TYPE_UNKNOWN),
+          constantMap: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Map)", imports.TYPE_UNKNOWN),
+          constantSet: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Set)", imports.TYPE_UNKNOWN),
+          constantWeakMap: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(WeakMap)", imports.TYPE_UNKNOWN),
+          constantWeakSet: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(WeakSet)", imports.TYPE_UNKNOWN),
+          constantSymbol: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Symbol)", imports.TYPE_UNKNOWN),
+          constantProxy: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Proxy)", imports.TYPE_UNKNOWN),
+          constantReflect: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Reflect)", imports.TYPE_UNKNOWN),
+          constantIntl: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Intl)", imports.TYPE_UNKNOWN),
+          constantConsole: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(console)", imports.TYPE_UNKNOWN),
+          constantGlobalThis: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(globalThis)", imports.TYPE_UNKNOWN),
+          constantInfinity: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(Infinity)", imports.TYPE_UNKNOWN),
+          constantNaN: (node, compiler, imports) =>
+            new imports.TypedInput("new vm.runtime.ext_jsoop.JSObject(NaN)", imports.TYPE_UNKNOWN),
+          callMethod: (node, compiler, imports) => {
+            const methodExpr = compiler.descendInput(node.METHOD).asString();
+            const instanceExpr = compiler.descendInput(node.INSTANCE).asUnknown();
+            const argsExpr = node.ARGS ? compiler.descendInput(node.ARGS).asUnknown() : "new vm.jwArray.Type([])";
+
+            const source = `(yield* (function*() {
+     const method = ${methodExpr};
+     const instance = ${instanceExpr};
+     const target = instance instanceof vm.runtime.ext_jsoop.JSObject ? instance.value : instance;
+     const proto = target !== null && target !== undefined ? Object.getPrototypeOf(target) : null;
+     const fn = (target && target[method]) || (proto && proto[method]);
+     const actualFn = fn instanceof vm.runtime.ext_jsoop.JSObject ? fn.value : fn;
+     if (!actualFn || typeof actualFn !== 'function') return new vm.runtime.ext_jsoop.JSObject(undefined);
+     let args = (${argsExpr});
+     if (args instanceof vm.runtime.ext_jsoop.JSObject) args = args.value;
+     if (args instanceof vm.jwArray.Type) args = args.array;
+     if (!args) args = [];
+     if (!Array.isArray(args)) args = [args];
+     if (actualFn && actualFn._jsoopFactory) {
+       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+       if (clonedThread) clonedThread.jsoopArgs = {};
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
+       }
+       return yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, clonedThread, args));
+     }
+     const result = actualFn.apply(target, actualFn && actualFn._jsoopMethod ? [thread].concat(args) : args);
+     if (result && typeof result.next === 'function') return yield* result;
+     return new vm.runtime.ext_jsoop.JSObject(result);
+   })())`;
+            return new imports.TypedInput(source, imports.TYPE_UNKNOWN);
+          },
+          runMethod: (node, compiler, imports) => {
+            const methodExpr = compiler.descendInput(node.METHOD).asString();
+            const instanceExpr = compiler.descendInput(node.INSTANCE).asUnknown();
+            const argsExpr = node.ARGS ? compiler.descendInput(node.ARGS).asUnknown() : "new vm.jwArray.Type([])";
+
+            compiler.source += `yield* (function*() {
+     const method = ${methodExpr};
+     const instance = ${instanceExpr};
+     const target = instance instanceof vm.runtime.ext_jsoop.JSObject ? instance.value : instance;
+     const proto = target !== null && target !== undefined ? Object.getPrototypeOf(target) : null;
+     const fn = (target && target[method]) || (proto && proto[method]);
+     const actualFn = fn instanceof vm.runtime.ext_jsoop.JSObject ? fn.value : fn;
+     if (!actualFn || typeof actualFn !== 'function') return;
+     let args = (${argsExpr});
+     if (args instanceof vm.runtime.ext_jsoop.JSObject) args = args.value;
+     if (args instanceof vm.jwArray.Type) args = args.array;
+     if (!args) args = [];
+     if (!Array.isArray(args)) args = [args];
+     if (actualFn && actualFn._jsoopFactory) {
+       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+       if (clonedThread) clonedThread.jsoopArgs = {};
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
+       }
+       yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, clonedThread, args));
+       return;
+     }
+     const result = actualFn.apply(target, actualFn && actualFn._jsoopMethod ? [thread].concat(args) : args);
+     if (result && typeof result.next === 'function') {
+       yield* result;
+       return;
+     }
+     if (result && typeof result.then === 'function') {
+       yield* waitPromise(result);
+       return;
+     }
+   })();`;
+          },
+          callFunction: (node, compiler, imports) => {
+            const funcExpr = compiler.descendInput(node.FUNC).asUnknown();
+            const thisExpr = compiler.descendInput(node.THIS).asUnknown();
+            const argsExpr = node.ARGS ? compiler.descendInput(node.ARGS).asUnknown() : "new vm.jwArray.Type([])";
+
+            const source = `(yield* (function*() {
+     const func = ${funcExpr};
+     const thisArg = ${thisExpr};
+     const target = thisArg instanceof vm.runtime.ext_jsoop.JSObject ? thisArg.value : thisArg;
+     const actualFunc = func instanceof vm.runtime.ext_jsoop.JSObject ? func.value : func;
+     if (!actualFunc || typeof actualFunc !== 'function') return new vm.runtime.ext_jsoop.JSObject(undefined);
+     let args = (${argsExpr});
+     if (args instanceof vm.runtime.ext_jsoop.JSObject) args = args.value;
+     if (args instanceof vm.jwArray.Type) args = args.array;
+     if (!args) args = [];
+     if (!Array.isArray(args)) args = [args];
+     if (actualFunc && actualFunc._jsoopFactory) {
+       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+       if (clonedThread) clonedThread.jsoopArgs = {};
+       const paramNames = Array.isArray(actualFunc._jsoopParams) ? actualFunc._jsoopParams : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
+       }
+       return yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, clonedThread, args));
+     }
+     const result = actualFunc.apply(target, actualFunc && actualFunc._jsoopMethod ? [thread].concat(args) : args);
+     if (result && typeof result.next === 'function') return yield* result;
+     return new vm.runtime.ext_jsoop.JSObject(result);
+   })())`;
+            return new imports.TypedInput(source, imports.TYPE_UNKNOWN);
+          },
+          runFunction: (node, compiler, imports) => {
+            const funcExpr = compiler.descendInput(node.FUNC).asUnknown();
+            const thisExpr = compiler.descendInput(node.THIS).asUnknown();
+            const argsExpr = node.ARGS ? compiler.descendInput(node.ARGS).asUnknown() : "new vm.jwArray.Type([])";
+
+            compiler.source += `yield* (function*() {
+     const func = ${funcExpr};
+     const thisArg = ${thisExpr};
+     const target = thisArg instanceof vm.runtime.ext_jsoop.JSObject ? thisArg.value : thisArg;
+     const actualFunc = func instanceof vm.runtime.ext_jsoop.JSObject ? func.value : func;
+     if (!actualFunc || typeof actualFunc !== 'function') return;
+     let args = (${argsExpr});
+     if (args instanceof vm.runtime.ext_jsoop.JSObject) args = args.value;
+     if (args instanceof vm.jwArray.Type) args = args.array;
+     if (!args) args = [];
+     if (!Array.isArray(args)) args = [args];
+     if (actualFunc && actualFunc._jsoopFactory) {
+       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+       if (clonedThread) clonedThread.jsoopArgs = {};
+       const paramNames = Array.isArray(actualFunc._jsoopParams) ? actualFunc._jsoopParams : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
+       }
+       yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, clonedThread, args));
+       return;
+     }
+     const result = actualFunc.apply(target, actualFunc && actualFunc._jsoopMethod ? [thread].concat(args) : args);
+     if (result && typeof result.next === 'function') {
+       yield* result;
+       return;
+     }
+     if (result && typeof result.then === 'function') {
+       yield* waitPromise(result);
+       return;
+     }
+   })();`;
           },
 
           awaitCallMethod: (node, compiler, imports) => {
             const methodExpr = compiler.descendInput(node.METHOD).asString();
             const instanceExpr = compiler.descendInput(node.INSTANCE).asUnknown();
-            const argsExpr = compiler.descendInput(node.ARGS).asUnknown();
+            const argsExpr = node.ARGS ? compiler.descendInput(node.ARGS).asUnknown() : "new vm.jwArray.Type([])";
 
-            const source = `(async () => {
+            const source = `(yield* (function*() {
      const method = ${methodExpr};
      const instance = ${instanceExpr};
-     const args = vm.jwArray.Type.toArray(${argsExpr});
-     const result = instance[method].apply(instance, args);
-     if (result && typeof result.next === 'function') {
-       let done = false;
-       let value;
-       while (!done) {
-         const step = result.next();
-         done = step.done;
-         value = step.value;
-         if (!done) await Promise.resolve();
+     const target = instance instanceof vm.runtime.ext_jsoop.JSObject ? instance.value : instance;
+     const proto = target !== null && target !== undefined ? Object.getPrototypeOf(target) : null;
+     const fn = (target && target[method]) || (proto && proto[method]);
+     const actualFn = fn instanceof vm.runtime.ext_jsoop.JSObject ? fn.value : fn;
+     if (!actualFn || typeof actualFn !== 'function') return new vm.runtime.ext_jsoop.JSObject(undefined);
+     let args = (${argsExpr});
+     if (args instanceof vm.runtime.ext_jsoop.JSObject) args = args.value;
+     if (args instanceof vm.jwArray.Type) args = args.array;
+     if (!args) args = [];
+     if (!Array.isArray(args)) args = [args];
+     if (actualFn && actualFn._jsoopFactory) {
+       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+       if (clonedThread) clonedThread.jsoopArgs = {};
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
        }
-       return new vm.runtime.ext_jsoop.JSObject(value);
+       const result = yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, clonedThread, args));
+       return new vm.runtime.ext_jsoop.JSObject(result);
      }
+     const result = actualFn.apply(target, actualFn && actualFn._jsoopMethod ? [thread].concat(args) : args);
+     if (result && typeof result.next === 'function') return new vm.runtime.ext_jsoop.JSObject(yield* result);
      if (result && typeof result.then === 'function') {
-       return new vm.runtime.ext_jsoop.JSObject(await result);
+       return new vm.runtime.ext_jsoop.JSObject(yield* waitPromise(result));
      }
      return new vm.runtime.ext_jsoop.JSObject(result);
-   })()`;
+   })())`;
             return new imports.TypedInput(source, imports.TYPE_UNKNOWN);
           },
 
           awaitRunMethod: (node, compiler, imports) => {
             const methodExpr = compiler.descendInput(node.METHOD).asString();
             const instanceExpr = compiler.descendInput(node.INSTANCE).asUnknown();
-            const argsExpr = compiler.descendInput(node.ARGS).asUnknown();
+            const argsExpr = node.ARGS ? compiler.descendInput(node.ARGS).asUnknown() : "new vm.jwArray.Type([])";
 
-            const source = `(async () => {
+            compiler.source += `yield* (function*() {
      const method = ${methodExpr};
      const instance = ${instanceExpr};
-     const args = vm.jwArray.Type.toArray(${argsExpr});
-     const result = instance[method].apply(instance, args);
-     if (result && typeof result.next === 'function') {
-       let done = false;
-       while (!done) {
-         const step = result.next();
-         done = step.done;
-         if (!done) await Promise.resolve();
+     const target = instance instanceof vm.runtime.ext_jsoop.JSObject ? instance.value : instance;
+     const proto = target !== null && target !== undefined ? Object.getPrototypeOf(target) : null;
+     const fn = (target && target[method]) || (proto && proto[method]);
+     const actualFn = fn instanceof vm.runtime.ext_jsoop.JSObject ? fn.value : fn;
+     if (!actualFn || typeof actualFn !== 'function') return;
+     let args = (${argsExpr});
+     if (args instanceof vm.runtime.ext_jsoop.JSObject) args = args.value;
+     if (args instanceof vm.jwArray.Type) args = args.array;
+     if (!args) args = [];
+     if (!Array.isArray(args)) args = [args];
+     if (actualFn && actualFn._jsoopFactory) {
+       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+       if (clonedThread) clonedThread.jsoopArgs = {};
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
        }
-     } else if (result && typeof result.then === 'function') {
-       await result;
+       yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, clonedThread, args));
+       return;
      }
-   })()`;
-            return new imports.TypedInput(source, imports.TYPE_UNKNOWN);
+     const result = actualFn.apply(target, actualFn && actualFn._jsoopMethod ? [thread].concat(args) : args);
+     if (result && typeof result.next === 'function') yield* result;
+     if (result && typeof result.then === 'function') {
+       yield* waitPromise(result);
+     }
+   })();`;
           },
 
           awaitCallFunction: (node, compiler, imports) => {
             const funcExpr = compiler.descendInput(node.FUNC).asUnknown();
             const thisExpr = compiler.descendInput(node.THIS).asUnknown();
-            const argsExpr = compiler.descendInput(node.ARGS).asUnknown();
+            const argsExpr = node.ARGS ? compiler.descendInput(node.ARGS).asUnknown() : "new vm.jwArray.Type([])";
 
-            const source = `(async () => {
+            const source = `(yield* (function*() {
      const func = ${funcExpr};
      const thisArg = ${thisExpr};
-     const args = vm.jwArray.Type.toArray(${argsExpr});
-     const result = func.apply(thisArg, args);
-     if (result && typeof result.next === 'function') {
-       let done = false;
-       let value;
-       while (!done) {
-         const step = result.next();
-         done = step.done;
-         value = step.value;
-         if (!done) await Promise.resolve();
+     const target = thisArg instanceof vm.runtime.ext_jsoop.JSObject ? thisArg.value : thisArg;
+     const actualFunc = func instanceof vm.runtime.ext_jsoop.JSObject ? func.value : func;
+     if (!actualFunc || typeof actualFunc !== 'function') return new vm.runtime.ext_jsoop.JSObject(undefined);
+     let args = (${argsExpr});
+     if (args instanceof vm.runtime.ext_jsoop.JSObject) args = args.value;
+     if (args instanceof vm.jwArray.Type) args = args.array;
+     if (!args) args = [];
+     if (!Array.isArray(args)) args = [args];
+     if (actualFunc && actualFunc._jsoopFactory) {
+       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+       if (clonedThread) clonedThread.jsoopArgs = {};
+       const paramNames = Array.isArray(actualFunc._jsoopParams) ? actualFunc._jsoopParams : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
        }
-       return new vm.runtime.ext_jsoop.JSObject(value);
+       const result = yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, clonedThread, args));
+       return new vm.runtime.ext_jsoop.JSObject(result);
      }
+     const result = actualFunc.apply(target, actualFunc && actualFunc._jsoopMethod ? [thread].concat(args) : args);
+     if (result && typeof result.next === 'function') return new vm.runtime.ext_jsoop.JSObject(yield* result);
      if (result && typeof result.then === 'function') {
-       return new vm.runtime.ext_jsoop.JSObject(await result);
+       return new vm.runtime.ext_jsoop.JSObject(yield* waitPromise(result));
      }
      return new vm.runtime.ext_jsoop.JSObject(result);
-   })()`;
+   })())`;
             return new imports.TypedInput(source, imports.TYPE_UNKNOWN);
           },
 
           awaitRunFunction: (node, compiler, imports) => {
             const funcExpr = compiler.descendInput(node.FUNC).asUnknown();
             const thisExpr = compiler.descendInput(node.THIS).asUnknown();
-            const argsExpr = compiler.descendInput(node.ARGS).asUnknown();
+            const argsExpr = node.ARGS ? compiler.descendInput(node.ARGS).asUnknown() : "new vm.jwArray.Type([])";
 
-            const source = `(async () => {
+            compiler.source += `yield* (function*() {
      const func = ${funcExpr};
      const thisArg = ${thisExpr};
-     const args = vm.jwArray.Type.toArray(${argsExpr});
-     const result = func.apply(thisArg, args);
-     if (result && typeof result.next === 'function') {
-       let done = false;
-       while (!done) {
-         const step = result.next();
-         done = step.done;
-         if (!done) await Promise.resolve();
+     const target = thisArg instanceof vm.runtime.ext_jsoop.JSObject ? thisArg.value : thisArg;
+     const actualFunc = func instanceof vm.runtime.ext_jsoop.JSObject ? func.value : func;
+     if (!actualFunc || typeof actualFunc !== 'function') return;
+     let args = (${argsExpr});
+     if (args instanceof vm.runtime.ext_jsoop.JSObject) args = args.value;
+     if (args instanceof vm.jwArray.Type) args = args.array;
+     if (!args) args = [];
+     if (!Array.isArray(args)) args = [args];
+     if (actualFunc && actualFunc._jsoopFactory) {
+       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+       if (clonedThread) clonedThread.jsoopArgs = {};
+       const paramNames = Array.isArray(actualFunc._jsoopParams) ? actualFunc._jsoopParams : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
        }
-     } else if (result && typeof result.then === 'function') {
-       await result;
+       yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, clonedThread, args));
+       return;
      }
-   })()`;
-            return new imports.TypedInput(source, imports.TYPE_UNKNOWN);
-          }
-        }
+     const result = actualFunc.apply(target, actualFunc && actualFunc._jsoopMethod ? [thread].concat(args) : args);
+     if (result && typeof result.next === 'function') yield* result;
+     if (result && typeof result.then === 'function') {
+       yield* waitPromise(result);
+     }
+   })();`;
+          },
+        },
       };
     }
 
@@ -1889,13 +2653,13 @@
 
     _wrapMaybe(x) {
       if (x instanceof JSObject) return x;
-      if (x && typeof x === 'object' && x.customId) return new JSObject(x);
+      if (x && typeof x === "object" && x.customId) return new JSObject(x);
       return new JSObject(x);
     }
 
     _convertJwArrayToArgs(jwArrayObj) {
       if (jwArrayObj instanceof jwArray.Type) {
-        return jwArrayObj.array.map(item => {
+        return jwArrayObj.array.map((item) => {
           // Resolve any JSObject references in the array
           return this._convertToNativeValue(item);
         });
@@ -1918,7 +2682,7 @@
       // Resolve JSObject wrappers and lookup markers first
       if (value instanceof JSObject) value = value.value;
 
-      if (value && typeof value === 'object' && value._jsoopLookupMarker && value.lookupId) {
+      if (value && typeof value === "object" && value._jsoopLookupMarker && value.lookupId) {
         const actual = this._getFromLookupTable(value.lookupId);
         if (actual instanceof JSObject) value = actual.value;
         else value = actual;
@@ -1927,7 +2691,7 @@
       // Primitives, functions, null/undefined pass through
       if (value === null || value === undefined) return value;
       const t = typeof value;
-      if (t !== 'object') return value;
+      if (t !== "object") return value;
 
       // Avoid infinite recursion on circular references
       try {
@@ -1939,7 +2703,7 @@
       }
 
       // dogeiscutObject: value.map is expected to be entries for Object.fromEntries
-      if (value && value.customId === 'dogeiscutObject' && value.map) {
+      if (value && value.customId === "dogeiscutObject" && value.map) {
         try {
           const obj = {};
           for (const entry of value.map) {
@@ -1955,8 +2719,8 @@
       }
 
       // jwArray: value.array
-      if (value && value.customId === 'jwArray' && value.array) {
-        return value.array.map(item => this._convertToNativeValueRecursive(item, seen));
+      if (value && value.customId === "jwArray" && value.array) {
+        return value.array.map((item) => this._convertToNativeValueRecursive(item, seen));
       }
 
       // Native Array: convert nested special values in place to preserve identity
@@ -2006,16 +2770,20 @@
       try {
         return String(nativeValue);
       } catch (e) {
-        return '[unconvertible]';
+        return "[unconvertible]";
       }
     }
 
     functionHatNotice() {
-      alert('Make sure to use the "await" version of the call method/function blocks when a function hat block returns a value, it returns a JavaScript Promise since the hat may not immediately return.');
+      alert(
+        'Make sure to use the "await" version of the call method/function blocks when a function hat block returns a value, it returns a JavaScript Promise since the hat may not immediately return.',
+      );
     }
 
     propSettingNotice() {
-      alert("These property settings block are to be used with JavaScript Objects stored in variables. They modify them in place!");
+      alert(
+        "These property settings block are to be used with JavaScript Objects stored in variables. They modify them in place!",
+      );
     }
 
     codeInput(args) {
@@ -2060,7 +2828,9 @@
     }
 
     constantAsyncFunction() {
-      return this._wrapForOtherExtensions(new JSObject(Object.getPrototypeOf(async function() { }).constructor));
+      return this._wrapForOtherExtensions(
+        new JSObject(Object.getPrototypeOf(async function () {}).constructor),
+      );
     }
 
     constantDate() {
@@ -2131,388 +2901,461 @@
       return this._wrapForOtherExtensions(new JSObject(NaN));
     }
 
-    evalJS({
-      CODE
-    }) {
-      if (DEBUG) console.dir({
-        action: 'evalJS(entry)',
-        CODE
-      });
+    evalJS({ CODE }) {
+      if (DEBUG)
+        console.dir({
+          action: "evalJS(entry)",
+          CODE,
+        });
       try {
-        const fn = new Function('"use strict"; return (function(){ ' + CODE + ' })()');
+        const fn = new Function('"use strict"; return (function(){ ' + CODE + " })()");
         const result = fn();
-        if (DEBUG) console.dir({
-          action: 'evalJS(resultRaw)',
-          result
-        });
+        if (DEBUG)
+          console.dir({
+            action: "evalJS(resultRaw)",
+            result,
+          });
         const wrapped = JSObject.toType(result);
-        if (DEBUG) console.dir({
-          action: 'evalJS(wrapped)',
-          wrapped
-        });
+        if (DEBUG)
+          console.dir({
+            action: "evalJS(wrapped)",
+            wrapped,
+          });
         return this._wrapForOtherExtensions(wrapped);
       } catch (err) {
-        console.error('JS OOP Error in evalJS:', err);
-        if (DEBUG) console.dir({
-          action: 'evalJS(error)',
-          error: err
-        });
+        console.error("JS OOP Error in evalJS:", err);
+        if (DEBUG)
+          console.dir({
+            action: "evalJS(error)",
+            error: err,
+          });
 
-        return this._wrapForOtherExtensions(new JSObject({
-          error: String(err)
-        }));
+        return this._wrapForOtherExtensions(
+          new JSObject({
+            error: String(err),
+          }),
+        );
       }
     }
 
-    runJS({
-      CODE
-    }) {
-      if (DEBUG) console.dir({
-        action: 'runJS(entry)',
-        CODE
-      });
+    runJS({ CODE }) {
+      if (DEBUG)
+        console.dir({
+          action: "runJS(entry)",
+          CODE,
+        });
       try {
         const fn = new Function('"use strict"; ' + CODE);
         fn();
-        if (DEBUG) console.dir({
-          action: 'runJS(done)'
-        });
+        if (DEBUG)
+          console.dir({
+            action: "runJS(done)",
+          });
       } catch (err) {
-        console.error('JS OOP Error in runJS:', err);
-        if (DEBUG) console.dir({
-          action: 'runJS(error)',
-          error: err
-        });
+        console.error("JS OOP Error in runJS:", err);
+        if (DEBUG)
+          console.dir({
+            action: "runJS(error)",
+            error: err,
+          });
       }
     }
 
-    jsCommand({
-      CODE
-    }) {
+    jsCommand({ CODE }) {
       return this.runJS({
-        CODE
+        CODE,
       });
     }
 
-    jsReporter({
-      CODE
-    }) {
+    jsReporter({ CODE }) {
       return this.evalJS({
-        CODE
+        CODE,
       });
     }
 
-    new({
-      CONSTRUCTOR,
-      ARGS
-    }) {
-      if (DEBUG) console.dir({
-        action: 'new(entry)',
-        CONSTRUCTOR,
-        ARGS
-      });
+    new({ CONSTRUCTOR, ARGS }) {
+      if (DEBUG)
+        console.dir({
+          action: "new(entry)",
+          CONSTRUCTOR,
+          ARGS,
+        });
       try {
         const ctorWrap = JSObject.toType(CONSTRUCTOR);
         const ctor = this._getActualValue(ctorWrap); // Resolve constructor reference
         const args = this._convertJwArrayToArgs(ARGS);
-        if (typeof ctor !== 'function') {
-          return this._wrapForOtherExtensions(new JSObject({
-            error: 'Constructor is not a function'
-          }));
+        if (typeof ctor !== "function") {
+          return this._wrapForOtherExtensions(
+            new JSObject({
+              error: "Constructor is not a function",
+            }),
+          );
         }
         try {
           const instance = Reflect.construct(ctor, args);
-          if (DEBUG) console.dir({
-            action: 'new(result)',
-            instance
-          });
+          if (DEBUG)
+            console.dir({
+              action: "new(result)",
+              instance,
+            });
           const result = JSObject.toType(instance);
           return this._wrapForOtherExtensions(this._convertResultToJwArray(result));
         } catch (err) {
-          console.error('JS OOP Error in new:', err);
-          if (DEBUG) console.dir({
-            action: 'new(error)',
-            error: err
-          });
-          return this._wrapForOtherExtensions(new JSObject({
-            error: String(err)
-          }));
+          console.error("JS OOP Error in new:", err);
+          if (DEBUG)
+            console.dir({
+              action: "new(error)",
+              error: err,
+            });
+          return this._wrapForOtherExtensions(
+            new JSObject({
+              error: String(err),
+            }),
+          );
         }
       } catch (err) {
-        console.error('JS OOP Error in new (outer):', err);
-        if (DEBUG) console.dir({
-          action: 'new(errorOuter)',
-          error: err
-        });
-        return this._wrapForOtherExtensions(new JSObject({
-          error: String(err)
-        }));
+        console.error("JS OOP Error in new (outer):", err);
+        if (DEBUG)
+          console.dir({
+            action: "new(errorOuter)",
+            error: err,
+          });
+        return this._wrapForOtherExtensions(
+          new JSObject({
+            error: String(err),
+          }),
+        );
       }
     }
 
-    callMethod({
-      METHOD,
-      INSTANCE,
-      ARGS
-    }, util) {
-      if (DEBUG) console.dir({
-        action: 'callMethod(entry)',
-        METHOD,
-        INSTANCE,
-        ARGS
-      });
+    callMethod({ METHOD, INSTANCE, ARGS }, util) {
+      if (DEBUG)
+        console.dir({
+          action: "callMethod(entry)",
+          METHOD,
+          INSTANCE,
+          ARGS,
+        });
 
       const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
 
       const args = this._convertJwArrayToArgs(ARGS);
 
-      if (!target || (typeof target !== 'object' && typeof target !== 'function')) {
+      if (!target || (typeof target !== "object" && typeof target !== "function")) {
         const primProto = Object.getPrototypeOf(target);
         const fnPrim = primProto && primProto[METHOD];
-        if (typeof fnPrim === 'function') {
+        if (typeof fnPrim === "function") {
           try {
-            const primCallArgs = (fnPrim && fnPrim._jsoopMethod) ? [(util && util.thread)].concat(args) : args;
-            const result = fnPrim.apply(target, primCallArgs);
-            if (DEBUG) console.dir({
-              action: 'callMethod(resultPrimitive)',
-              result
-            });
+            const primIsFactory = this._isJsoopFactory(fnPrim);
+            const primCallArgs = primIsFactory
+              ? args
+              : fnPrim && fnPrim._jsoopMethod
+                ? [util && util.thread].concat(args)
+                : args;
+            const result = primIsFactory
+              ? this._invokeJsoopFactory(fnPrim, target, util && util.thread, args)
+              : fnPrim.apply(target, primCallArgs);
+            if (DEBUG)
+              console.dir({
+                action: "callMethod(resultPrimitive)",
+                result,
+              });
             const wrappedResult = JSObject.toType(result);
             return this._wrapForOtherExtensions(this._convertResultToJwArray(wrappedResult));
           } catch (err) {
-            console.error('JS OOP Error in callMethod (primitive):', err);
-            if (DEBUG) console.dir({
-              action: 'callMethod(errorPrimitive)',
-              error: err
-            });
-            return this._wrapForOtherExtensions(new JSObject({
-              error: String(err)
-            }));
+            console.error("JS OOP Error in callMethod (primitive):", err);
+            if (DEBUG)
+              console.dir({
+                action: "callMethod(errorPrimitive)",
+                error: err,
+              });
+            return this._wrapForOtherExtensions(
+              new JSObject({
+                error: String(err),
+              }),
+            );
           }
         }
-        return this._wrapForOtherExtensions(new JSObject({
-          error: `No method ${METHOD} on target`
-        }));
+        return this._wrapForOtherExtensions(
+          new JSObject({
+            error: `No method ${METHOD} on target`,
+          }),
+        );
       }
 
       const fn = target[METHOD];
-      if (typeof fn !== 'function') {
+      if (typeof fn !== "function") {
         const proto = Object.getPrototypeOf(target);
         const fnProto = proto && proto[METHOD];
-        if (typeof fnProto === 'function') {
+        if (typeof fnProto === "function") {
           try {
-            const protoCallArgs = (fnProto && fnProto._jsoopMethod) ? [(util && util.thread)].concat(args) : args;
-            const result = fnProto.apply(target, protoCallArgs);
-            if (DEBUG) console.dir({
-              action: 'callMethod(resultProto)',
-              result
-            });
+            const protoIsFactory = this._isJsoopFactory(fnProto);
+            const protoCallArgs = protoIsFactory
+              ? args
+              : fnProto && fnProto._jsoopMethod
+                ? [util && util.thread].concat(args)
+                : args;
+            const result = protoIsFactory
+              ? this._invokeJsoopFactory(fnProto, target, util && util.thread, args)
+              : fnProto.apply(target, protoCallArgs);
+            if (DEBUG)
+              console.dir({
+                action: "callMethod(resultProto)",
+                result,
+              });
             const wrappedResult = JSObject.toType(result);
             return this._wrapForOtherExtensions(this._convertResultToJwArray(wrappedResult));
           } catch (err) {
-            console.error('JS OOP Error in callMethod (proto):', err);
-            if (DEBUG) console.dir({
-              action: 'callMethod(errorProto)',
-              error: err
-            });
-            return this._wrapForOtherExtensions(new JSObject({
-              error: String(err)
-            }));
+            console.error("JS OOP Error in callMethod (proto):", err);
+            if (DEBUG)
+              console.dir({
+                action: "callMethod(errorProto)",
+                error: err,
+              });
+            return this._wrapForOtherExtensions(
+              new JSObject({
+                error: String(err),
+              }),
+            );
           }
         }
 
-        return this._wrapForOtherExtensions(new JSObject({
-          error: `No method ${METHOD}`
-        }));
+        return this._wrapForOtherExtensions(
+          new JSObject({
+            error: `No method ${METHOD}`,
+          }),
+        );
       }
 
       try {
-        const callArgs = (fn && fn._jsoopMethod) ? [(util && util.thread)].concat(args) : args;
-        const result = fn.apply(target, callArgs);
-        if (DEBUG) console.dir({
-          action: 'callMethod(result)',
-          result
-        });
+        const isFactory = this._isJsoopFactory(fn);
+        const callArgs = isFactory ? args : fn && fn._jsoopMethod ? [util && util.thread].concat(args) : args;
+        const result = isFactory
+          ? this._invokeJsoopFactory(fn, target, util && util.thread, args)
+          : fn.apply(target, callArgs);
+        if (DEBUG)
+          console.dir({
+            action: "callMethod(result)",
+            result,
+          });
         return this._wrapForOtherExtensions(this._convertResultToJwArray(this._convertToNativeValue(result)));
       } catch (err) {
-        console.error('JS OOP Error in callMethod:', err);
-        if (DEBUG) console.dir({
-          action: 'callMethod(error)',
-          error: err
-        });
-        return this._wrapForOtherExtensions(new JSObject({
-          error: String(err)
-        }));
+        console.error("JS OOP Error in callMethod:", err);
+        if (DEBUG)
+          console.dir({
+            action: "callMethod(error)",
+            error: err,
+          });
+        return this._wrapForOtherExtensions(
+          new JSObject({
+            error: String(err),
+          }),
+        );
       }
     }
 
-    async awaitCallMethod({
-      METHOD,
-      INSTANCE,
-      ARGS
-    }, util) {
-      if (DEBUG) console.dir({
-        action: 'awaitCallMethod(entry)',
-        METHOD,
-        INSTANCE,
-        ARGS
-      });
+    async awaitCallMethod({ METHOD, INSTANCE, ARGS }, util) {
+      if (DEBUG)
+        console.dir({
+          action: "awaitCallMethod(entry)",
+          METHOD,
+          INSTANCE,
+          ARGS,
+        });
 
       const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
       const args = this._convertJwArrayToArgs(ARGS);
 
-      if (!target || (typeof target !== 'object' && typeof target !== 'function')) {
+      if (!target || (typeof target !== "object" && typeof target !== "function")) {
         const primProto = Object.getPrototypeOf(target);
         const fnPrim = primProto && primProto[METHOD];
-        if (typeof fnPrim === 'function') {
+        if (typeof fnPrim === "function") {
           try {
-            const primCallArgs = (fnPrim && fnPrim._jsoopMethod) ? [(util && util.thread)].concat(args) : args;
-            const res = fnPrim.apply(target, primCallArgs);
-            if (res && typeof res.then === 'function') {
+            const primIsFactory = this._isJsoopFactory(fnPrim);
+            const primCallArgs = primIsFactory
+              ? args
+              : fnPrim && fnPrim._jsoopMethod
+                ? [util && util.thread].concat(args)
+                : args;
+            const res = primIsFactory
+              ? await this._invokeJsoopFactory(fnPrim, target, util && util.thread, args)
+              : fnPrim.apply(target, primCallArgs);
+            if (res && typeof res.then === "function") {
               const awaited = await res;
-              if (DEBUG) console.dir({
-                action: 'awaitCallMethod(resultPrimitiveAwaited)',
-                awaited
-              });
+              if (DEBUG)
+                console.dir({
+                  action: "awaitCallMethod(resultPrimitiveAwaited)",
+                  awaited,
+                });
               const wrappedResult = JSObject.toType(awaited);
               return this._wrapForOtherExtensions(this._convertResultToJwArray(wrappedResult));
             }
-            if (DEBUG) console.dir({
-              action: 'awaitCallMethod(resultPrimitive)',
-              res
-            });
+            if (DEBUG)
+              console.dir({
+                action: "awaitCallMethod(resultPrimitive)",
+                res,
+              });
             const wrappedResult = JSObject.toType(res);
             return this._wrapForOtherExtensions(this._convertResultToJwArray(wrappedResult));
           } catch (err) {
-            console.error('JS OOP Error in awaitCallMethod (primitive):', err);
-            if (DEBUG) console.dir({
-              action: 'awaitCallMethod(errorPrimitive)',
-              error: err
-            });
-            return this._wrapForOtherExtensions(new JSObject({
-              error: String(err)
-            }));
+            console.error("JS OOP Error in awaitCallMethod (primitive):", err);
+            if (DEBUG)
+              console.dir({
+                action: "awaitCallMethod(errorPrimitive)",
+                error: err,
+              });
+            return this._wrapForOtherExtensions(
+              new JSObject({
+                error: String(err),
+              }),
+            );
           }
         }
-        return this._wrapForOtherExtensions(new JSObject({
-          error: `No method ${METHOD} on target`
-        }));
+        return this._wrapForOtherExtensions(
+          new JSObject({
+            error: `No method ${METHOD} on target`,
+          }),
+        );
       }
 
       let fn = target[METHOD];
-      if (typeof fn !== 'function') {
+      if (typeof fn !== "function") {
         const proto = Object.getPrototypeOf(target);
         fn = proto && proto[METHOD];
       }
-      if (typeof fn !== 'function') {
-        return this._wrapForOtherExtensions(new JSObject({
-          error: `No method ${METHOD}`
-        }));
+      if (typeof fn !== "function") {
+        return this._wrapForOtherExtensions(
+          new JSObject({
+            error: `No method ${METHOD}`,
+          }),
+        );
       }
 
       try {
-        const callArgs = (fn && fn._jsoopMethod) ? [(util && util.thread)].concat(args) : args;
-        const result = fn.apply(target, callArgs);
-        if (result && typeof result.then === 'function') {
+        const isFactory = this._isJsoopFactory(fn);
+        const callArgs = isFactory ? args : fn && fn._jsoopMethod ? [util && util.thread].concat(args) : args;
+        const result = isFactory
+          ? this._invokeJsoopFactory(fn, target, util && util.thread, args)
+          : fn.apply(target, callArgs);
+        if (result && typeof result.then === "function") {
           const awaited = await result;
-          if (DEBUG) console.dir({
-            action: 'awaitCallMethod(awaited)',
-            awaited
-          });
+          if (DEBUG)
+            console.dir({
+              action: "awaitCallMethod(awaited)",
+              awaited,
+            });
           const wrappedResult = JSObject.toType(awaited);
           return this._wrapForOtherExtensions(this._convertResultToJwArray(wrappedResult));
         }
-        if (DEBUG) console.dir({
-          action: 'awaitCallMethod(result)',
-          result
-        });
+        if (DEBUG)
+          console.dir({
+            action: "awaitCallMethod(result)",
+            result,
+          });
         return this._wrapForOtherExtensions(this._convertResultToJwArray(this._convertToNativeValue(result)));
       } catch (err) {
-        console.error('JS OOP Error in awaitCallMethod:', err);
-        if (DEBUG) console.dir({
-          action: 'awaitCallMethod(error)',
-          error: err
-        });
-        return this._wrapForOtherExtensions(new JSObject({
-          error: String(err)
-        }));
+        console.error("JS OOP Error in awaitCallMethod:", err);
+        if (DEBUG)
+          console.dir({
+            action: "awaitCallMethod(error)",
+            error: err,
+          });
+        return this._wrapForOtherExtensions(
+          new JSObject({
+            error: String(err),
+          }),
+        );
       }
     }
 
-    runMethod({
-      METHOD,
-      INSTANCE,
-      ARGS
-    }, util) {
-      if (DEBUG) console.dir({
-        action: 'runMethod(entry)',
-        METHOD,
-        INSTANCE,
-        ARGS
-      });
+    runMethod({ METHOD, INSTANCE, ARGS }, util) {
+      if (DEBUG)
+        console.dir({
+          action: "runMethod(entry)",
+          METHOD,
+          INSTANCE,
+          ARGS,
+        });
       const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
       const args = this._convertJwArrayToArgs(ARGS);
 
-      if (!target || (typeof target !== 'object' && typeof target !== 'function')) {
+      if (!target || (typeof target !== "object" && typeof target !== "function")) {
         const primProto = Object.getPrototypeOf(target);
         const fnPrim = primProto && primProto[METHOD];
-        if (typeof fnPrim === 'function') {
+        if (typeof fnPrim === "function") {
           try {
-            const primCallArgs = (fnPrim && fnPrim._jsoopMethod) ? [(util && util.thread)].concat(args) : args;
-            fnPrim.apply(target, primCallArgs);
-            if (DEBUG) console.dir({
-              action: 'runMethod(donePrimitive)'
-            });
+            const primIsFactory = this._isJsoopFactory(fnPrim);
+            const primCallArgs = primIsFactory
+              ? args
+              : fnPrim && fnPrim._jsoopMethod
+                ? [util && util.thread].concat(args)
+                : args;
+            const result = primIsFactory
+              ? this._invokeJsoopFactory(fnPrim, target, util && util.thread, args)
+              : fnPrim.apply(target, primCallArgs);
+            if (DEBUG)
+              console.dir({
+                action: "runMethod(donePrimitive)",
+              });
             return;
           } catch (err) {
-            console.error('JS OOP Error in runMethod (primitive):', err);
-            if (DEBUG) console.dir({
-              action: 'runMethod(errorPrimitive)',
-              error: err
-            });
+            console.error("JS OOP Error in runMethod (primitive):", err);
+            if (DEBUG)
+              console.dir({
+                action: "runMethod(errorPrimitive)",
+                error: err,
+              });
             return;
           }
         }
-        if (DEBUG) console.dir({
-          action: 'runMethod(noMethod)'
-        });
+        if (DEBUG)
+          console.dir({
+            action: "runMethod(noMethod)",
+          });
         return;
       }
 
       const fn = target[METHOD] || (Object.getPrototypeOf(target) && Object.getPrototypeOf(target)[METHOD]);
-      if (typeof fn === 'function') {
+      if (typeof fn === "function") {
         try {
-          const callArgs = (fn && fn._jsoopMethod) ? [(util && util.thread)].concat(args) : args;
-          fn.apply(target, callArgs);
-          if (DEBUG) console.dir({
-            action: 'runMethod(done'
-          });
+          const isFactory = this._isJsoopFactory(fn);
+          const callArgs = isFactory
+            ? args
+            : fn && fn._jsoopMethod
+              ? [util && util.thread].concat(args)
+              : args;
+          const result = isFactory
+            ? this._invokeJsoopFactory(fn, target, util && util.thread, args)
+            : fn.apply(target, callArgs);
+          if (DEBUG)
+            console.dir({
+              action: "runMethod(done",
+            });
         } catch (err) {
-          console.error('JS OOP Error in runMethod:', err);
-          if (DEBUG) console.dir({
-            action: 'runMethod(error)',
-            error: err
-          });
+          console.error("JS OOP Error in runMethod:", err);
+          if (DEBUG)
+            console.dir({
+              action: "runMethod(error)",
+              error: err,
+            });
         }
       } else {
-        if (DEBUG) console.dir({
-          action: 'runMethod(noMethod)',
-          METHOD
-        });
+        if (DEBUG)
+          console.dir({
+            action: "runMethod(noMethod)",
+            METHOD,
+          });
       }
     }
 
-    callFunction({
-      FUNC,
-      THIS,
-      ARGS
-    }) {
-      if (DEBUG) console.dir({
-        action: 'callFunction(entry)',
-        FUNC,
-        THIS,
-        ARGS
-      });
+    callFunction({ FUNC, THIS, ARGS }, util) {
+      if (DEBUG)
+        console.dir({
+          action: "callFunction(entry)",
+          FUNC,
+          THIS,
+          ARGS,
+        });
 
       try {
         const funcWrap = JSObject.toType(FUNC);
@@ -2520,42 +3363,53 @@
         const thisArg = THIS ? this._convertToNativeValue(THIS) : undefined;
         const args = this._convertJwArrayToArgs(ARGS);
 
-        if (typeof func !== 'function') {
-          return this._wrapForOtherExtensions(new JSObject({
-            error: 'FUNC is not a function'
-          }));
+        if (typeof func !== "function") {
+          return this._wrapForOtherExtensions(
+            new JSObject({
+              error: "FUNC is not a function",
+            }),
+          );
         }
 
-        const result = func.apply(thisArg, args);
-        if (DEBUG) console.dir({
-          action: 'callFunction(result)',
-          result
-        });
+        const isFactory = this._isJsoopFactory(func);
+        const callArgs = isFactory
+          ? args
+          : func && func._jsoopMethod
+            ? [util && util.thread].concat(args)
+            : args;
+        const result = isFactory
+          ? this._invokeJsoopFactory(func, thisArg, util && util.thread, args)
+          : func.apply(thisArg, callArgs);
+        if (DEBUG)
+          console.dir({
+            action: "callFunction(result)",
+            result,
+          });
 
         return this._wrapForOtherExtensions(this._convertResultToJwArray(this._convertToNativeValue(result)));
       } catch (err) {
-        console.error('JS OOP Error in callFunction:', err);
-        if (DEBUG) console.dir({
-          action: 'callFunction(error)',
-          error: err
-        });
-        return this._wrapForOtherExtensions(new JSObject({
-          error: String(err)
-        }));
+        console.error("JS OOP Error in callFunction:", err);
+        if (DEBUG)
+          console.dir({
+            action: "callFunction(error)",
+            error: err,
+          });
+        return this._wrapForOtherExtensions(
+          new JSObject({
+            error: String(err),
+          }),
+        );
       }
     }
 
-    async awaitCallFunction({
-      FUNC,
-      THIS,
-      ARGS
-    }) {
-      if (DEBUG) console.dir({
-        action: 'awaitCallFunction(entry)',
-        FUNC,
-        THIS,
-        ARGS
-      });
+    async awaitCallFunction({ FUNC, THIS, ARGS }, util) {
+      if (DEBUG)
+        console.dir({
+          action: "awaitCallFunction(entry)",
+          FUNC,
+          THIS,
+          ARGS,
+        });
 
       try {
         const funcWrap = JSObject.toType(FUNC);
@@ -2563,47 +3417,53 @@
         const thisArg = THIS ? this._convertToNativeValue(THIS) : undefined;
         const args = this._convertJwArrayToArgs(ARGS);
 
-        if (typeof func !== 'function') {
-          return this._wrapForOtherExtensions(new JSObject({
-            error: 'FUNC is not a function'
-          }));
+        if (typeof func !== "function") {
+          return this._wrapForOtherExtensions(
+            new JSObject({
+              error: "FUNC is not a function",
+            }),
+          );
         }
 
-        let result = func.apply(thisArg, args);
-        if (result && typeof result.then === 'function') {
+        const isFactory = this._isJsoopFactory(func);
+        let result = isFactory
+          ? await this._invokeJsoopFactory(func, thisArg, util && util.thread, args)
+          : func.apply(thisArg, func && func._jsoopMethod ? [util && util.thread].concat(args) : args);
+        if (result && typeof result.then === "function") {
           result = await result;
         }
 
-        if (DEBUG) console.dir({
-          action: 'awaitCallFunction(result)',
-          result
-        });
+        if (DEBUG)
+          console.dir({
+            action: "awaitCallFunction(result)",
+            result,
+          });
 
         //const wrappedResult = JSObject.toType(result);
         return this._wrapForOtherExtensions(this._convertResultToJwArray(this._convertToNativeValue(result)));
       } catch (err) {
-        console.error('JS OOP Error in awaitCallFunction:', err);
-        if (DEBUG) console.dir({
-          action: 'awaitCallFunction(error)',
-          error: err
-        });
-        return this._wrapForOtherExtensions(new JSObject({
-          error: String(err)
-        }));
+        console.error("JS OOP Error in awaitCallFunction:", err);
+        if (DEBUG)
+          console.dir({
+            action: "awaitCallFunction(error)",
+            error: err,
+          });
+        return this._wrapForOtherExtensions(
+          new JSObject({
+            error: String(err),
+          }),
+        );
       }
     }
 
-    runFunction({
-      FUNC,
-      THIS,
-      ARGS
-    }) {
-      if (DEBUG) console.dir({
-        action: 'runFunction(entry)',
-        FUNC,
-        THIS,
-        ARGS
-      });
+    runFunction({ FUNC, THIS, ARGS }, util) {
+      if (DEBUG)
+        console.dir({
+          action: "runFunction(entry)",
+          FUNC,
+          THIS,
+          ARGS,
+        });
 
       try {
         const funcWrap = JSObject.toType(FUNC);
@@ -2611,37 +3471,45 @@
         const thisArg = THIS ? this._convertToNativeValue(THIS) : undefined;
         const args = this._convertJwArrayToArgs(ARGS);
 
-        if (typeof func !== 'function') {
-          if (DEBUG) console.dir({
-            action: 'runFunction(notFunction)'
-          });
+        if (typeof func !== "function") {
+          if (DEBUG)
+            console.dir({
+              action: "runFunction(notFunction)",
+            });
           return;
         }
 
-        func.apply(thisArg, args);
-        if (DEBUG) console.dir({
-          action: 'runFunction(done)'
-        });
+        const isFactory = this._isJsoopFactory(func);
+        const callArgs = isFactory
+          ? args
+          : func && func._jsoopMethod
+            ? [util && util.thread].concat(args)
+            : args;
+        const result = isFactory
+          ? this._invokeJsoopFactory(func, thisArg, util && util.thread, args)
+          : func.apply(thisArg, callArgs);
+        if (DEBUG)
+          console.dir({
+            action: "runFunction(done)",
+          });
       } catch (err) {
-        console.error('JS OOP Error in runFunction:', err);
-        if (DEBUG) console.dir({
-          action: 'runFunction(error)',
-          error: err
-        });
+        console.error("JS OOP Error in runFunction:", err);
+        if (DEBUG)
+          console.dir({
+            action: "runFunction(error)",
+            error: err,
+          });
       }
     }
 
-    async awaitRunFunction({
-      FUNC,
-      THIS,
-      ARGS
-    }) {
-      if (DEBUG) console.dir({
-        action: 'awaitRunFunction(entry)',
-        FUNC,
-        THIS,
-        ARGS
-      });
+    async awaitRunFunction({ FUNC, THIS, ARGS }, util) {
+      if (DEBUG)
+        console.dir({
+          action: "awaitRunFunction(entry)",
+          FUNC,
+          THIS,
+          ARGS,
+        });
 
       try {
         const funcWrap = JSObject.toType(FUNC);
@@ -2649,118 +3517,139 @@
         const thisArg = THIS ? this._convertToNativeValue(THIS) : undefined;
         const args = this._convertJwArrayToArgs(ARGS);
 
-        if (typeof func !== 'function') {
-          if (DEBUG) console.dir({
-            action: 'awaitRunFunction(notFunction)'
-          });
+        if (typeof func !== "function") {
+          if (DEBUG)
+            console.dir({
+              action: "awaitRunFunction(notFunction)",
+            });
           return;
         }
 
-        let result = func.apply(thisArg, args);
-        if (result && typeof result.then === 'function') {
+        const isFactory = this._isJsoopFactory(func);
+        let result = isFactory
+          ? await this._invokeJsoopFactory(func, thisArg, util && util.thread, args)
+          : func.apply(thisArg, func && func._jsoopMethod ? [util && util.thread].concat(args) : args);
+        if (result && typeof result.then === "function") {
           await result;
         }
 
-        if (DEBUG) console.dir({
-          action: 'awaitRunFunction(done)'
-        });
+        if (DEBUG)
+          console.dir({
+            action: "awaitRunFunction(done)",
+          });
       } catch (err) {
-        console.error('JS OOP Error in awaitRunFunction:', err);
-        if (DEBUG) console.dir({
-          action: 'awaitRunFunction(error)',
-          error: err
-        });
+        console.error("JS OOP Error in awaitRunFunction:", err);
+        if (DEBUG)
+          console.dir({
+            action: "awaitRunFunction(error)",
+            error: err,
+          });
       }
     }
 
-    async awaitRunMethod({
-      METHOD,
-      INSTANCE,
-      ARGS
-    }, util) {
-      if (DEBUG) console.dir({
-        action: 'awaitRunMethod(entry)',
-        METHOD,
-        INSTANCE,
-        ARGS
-      });
+    async awaitRunMethod({ METHOD, INSTANCE, ARGS }, util) {
+      if (DEBUG)
+        console.dir({
+          action: "awaitRunMethod(entry)",
+          METHOD,
+          INSTANCE,
+          ARGS,
+        });
 
       const target = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
       const args = this._convertJwArrayToArgs(ARGS);
 
-      if (!target || (typeof target !== 'object' && typeof target !== 'function')) {
+      if (!target || (typeof target !== "object" && typeof target !== "function")) {
         const primProto = Object.getPrototypeOf(target);
         const fnPrim = primProto && primProto[METHOD];
-        if (typeof fnPrim === 'function') {
+        if (typeof fnPrim === "function") {
           try {
-            const primCallArgs = (fnPrim && fnPrim._jsoopMethod) ? [(util && util.thread)].concat(args) : args;
-            let result = fnPrim.apply(target, primCallArgs);
-            if (result && typeof result.then === 'function') {
+            const primIsFactory = this._isJsoopFactory(fnPrim);
+            const primCallArgs = primIsFactory
+              ? args
+              : fnPrim && fnPrim._jsoopMethod
+                ? [util && util.thread].concat(args)
+                : args;
+            let result = primIsFactory
+              ? await this._invokeJsoopFactory(fnPrim, target, util && util.thread, args)
+              : fnPrim.apply(target, primCallArgs);
+            if (result && typeof result.then === "function") {
               await result;
             }
-            if (DEBUG) console.dir({
-              action: 'awaitRunMethod(donePrimitive)'
-            });
+            if (DEBUG)
+              console.dir({
+                action: "awaitRunMethod(donePrimitive)",
+              });
             return;
           } catch (err) {
-            console.error('JS OOP Error in awaitRunMethod (primitive):', err);
-            if (DEBUG) console.dir({
-              action: 'awaitRunMethod(errorPrimitive)',
-              error: err
-            });
+            console.error("JS OOP Error in awaitRunMethod (primitive):", err);
+            if (DEBUG)
+              console.dir({
+                action: "awaitRunMethod(errorPrimitive)",
+                error: err,
+              });
             return;
           }
         }
-        if (DEBUG) console.dir({
-          action: 'awaitRunMethod(noMethod)'
-        });
+        if (DEBUG)
+          console.dir({
+            action: "awaitRunMethod(noMethod)",
+          });
         return;
       }
 
       const fn = target[METHOD] || (Object.getPrototypeOf(target) && Object.getPrototypeOf(target)[METHOD]);
-      if (typeof fn === 'function') {
+      if (typeof fn === "function") {
         try {
-          const callArgs = (fn && fn._jsoopMethod) ? [(util && util.thread)].concat(args) : args;
-          let result = fn.apply(target, callArgs);
-          if (result && typeof result.then === 'function') {
+          const isFactory = this._isJsoopFactory(fn);
+          const callArgs = isFactory
+            ? args
+            : fn && fn._jsoopMethod
+              ? [util && util.thread].concat(args)
+              : args;
+          let result = isFactory
+            ? await this._invokeJsoopFactory(fn, target, util && util.thread, args)
+            : fn.apply(target, callArgs);
+          if (result && typeof result.then === "function") {
             await result;
           }
-          if (DEBUG) console.dir({
-            action: 'awaitRunMethod(done)'
-          });
+          if (DEBUG)
+            console.dir({
+              action: "awaitRunMethod(done)",
+            });
         } catch (err) {
-          console.error('JS OOP Error in awaitRunMethod:', err);
-          if (DEBUG) console.dir({
-            action: 'awaitRunMethod(error)',
-            error: err
-          });
+          console.error("JS OOP Error in awaitRunMethod:", err);
+          if (DEBUG)
+            console.dir({
+              action: "awaitRunMethod(error)",
+              error: err,
+            });
         }
       } else {
-        if (DEBUG) console.dir({
-          action: 'awaitRunMethod(noMethod)',
-          METHOD
-        });
+        if (DEBUG)
+          console.dir({
+            action: "awaitRunMethod(noMethod)",
+            METHOD,
+          });
       }
     }
 
-    getProp({
-      PROP,
-      INSTANCE
-    }) {
-      if (DEBUG) console.dir({
-        action: 'getProp(entry)',
-        PROP,
-        INSTANCE
-      });
+    getProp({ PROP, INSTANCE }) {
+      if (DEBUG)
+        console.dir({
+          action: "getProp(entry)",
+          PROP,
+          INSTANCE,
+        });
       const target = this._getActualValue(INSTANCE); // Resolve instance reference (avoid cloning via to-native conversion)
 
       try {
         const val = target[PROP];
-        if (DEBUG) console.dir({ action: 'getProp(result)', val });
+        if (DEBUG) console.dir({ action: "getProp(result)", val });
 
         // If the property is an object/function, return a lookup marker so
         // nested get/set calls refer to the same underlying object.
-        if (val !== null && val !== undefined && (typeof val === 'object' || typeof val === 'function')) {
+        if (val !== null && val !== undefined && (typeof val === "object" || typeof val === "function")) {
           try {
             const jsobj = new JSObject(val);
             return this._storeInLookupTable(jsobj);
@@ -2772,26 +3661,24 @@
 
         return this._getActualValue(this._convertToNativeValue(val));
       } catch (err) {
-        console.error('JS OOP Error in getProp:', err);
-        if (DEBUG) console.dir({
-          action: 'getProp(error)',
-          error: err
-        });
+        console.error("JS OOP Error in getProp:", err);
+        if (DEBUG)
+          console.dir({
+            action: "getProp(error)",
+            error: err,
+          });
         return `[Error: ${String(err)}]`;
       }
     }
 
-    setPropString({
-      PROP,
-      INSTANCE,
-      VALUE
-    }) {
-      if (DEBUG) console.dir({
-        action: 'setPropString(entry)',
-        PROP,
-        INSTANCE,
-        VALUE
-      });
+    setPropString({ PROP, INSTANCE, VALUE }) {
+      if (DEBUG)
+        console.dir({
+          action: "setPropString(entry)",
+          PROP,
+          INSTANCE,
+          VALUE,
+        });
       const resolved = this._resolveInstanceHolder(INSTANCE);
       const target = resolved.value; // underlying value to mutate
 
@@ -2801,127 +3688,134 @@
       } catch {
         const t = VALUE && VALUE.trim();
         if (/^-?\d+(\.\d+)?$/.test(t)) parsed = Number(t);
-        else if (t === 'true') parsed = true;
-        else if (t === 'false') parsed = false;
+        else if (t === "true") parsed = true;
+        else if (t === "false") parsed = false;
         else parsed = VALUE;
       }
 
       try {
-        if (target && (typeof target === 'object' || typeof target === 'function')) {
+        if (target && (typeof target === "object" || typeof target === "function")) {
           target[PROP] = parsed;
         } else {
           const newObj = Object(target);
           newObj[PROP] = parsed;
           if (resolved.holder) resolved.holder.value = newObj;
-          else if (INSTANCE && typeof INSTANCE === 'object') INSTANCE.value = newObj;
+          else if (INSTANCE && typeof INSTANCE === "object") INSTANCE.value = newObj;
         }
-        if (DEBUG) console.dir({
-          action: 'setPropString(done)',
-          target: INSTANCE.value
-        });
+        if (DEBUG)
+          console.dir({
+            action: "setPropString(done)",
+            target: INSTANCE.value,
+          });
       } catch (err) {
-        console.error('JS OOP Error in setPropString:', err);
-        if (DEBUG) console.dir({
-          action: 'setPropString(error)',
-          error: err
-        });
+        console.error("JS OOP Error in setPropString:", err);
+        if (DEBUG)
+          console.dir({
+            action: "setPropString(error)",
+            error: err,
+          });
       }
     }
 
-    setPropJSObject({
-      PROP,
-      INSTANCE,
-      VALUE
-    }) {
-      if (DEBUG) console.dir({
-        action: 'setPropJSObject(entry)',
-        PROP,
-        INSTANCE,
-        VALUE
-      });
+    setPropJSObject({ PROP, INSTANCE, VALUE }) {
+      if (DEBUG)
+        console.dir({
+          action: "setPropJSObject(entry)",
+          PROP,
+          INSTANCE,
+          VALUE,
+        });
       const resolved = this._resolveInstanceHolder(INSTANCE);
       const target = resolved.value;
-      const value = (VALUE instanceof JSObject || (VALUE && typeof VALUE === 'object' && (VALUE._jsoopLookupMarker || VALUE.customId))) ? VALUE : this._convertToNativeValue(VALUE);
+      const value =
+        VALUE instanceof JSObject ||
+        (VALUE && typeof VALUE === "object" && (VALUE._jsoopLookupMarker || VALUE.customId))
+          ? VALUE
+          : this._convertToNativeValue(VALUE);
 
       try {
-        if (target && (typeof target === 'object' || typeof target === 'function')) {
+        if (target && (typeof target === "object" || typeof target === "function")) {
           target[PROP] = value;
         } else {
           const newObj = Object(target);
           newObj[PROP] = value;
           if (resolved.holder) resolved.holder.value = newObj;
-          else if (INSTANCE && typeof INSTANCE === 'object') INSTANCE.value = newObj;
+          else if (INSTANCE && typeof INSTANCE === "object") INSTANCE.value = newObj;
         }
-        if (DEBUG) console.dir({
-          action: 'setPropJSObject(done)',
-          target: resolved.holder ? resolved.holder.value : target
-        });
+        if (DEBUG)
+          console.dir({
+            action: "setPropJSObject(done)",
+            target: resolved.holder ? resolved.holder.value : target,
+          });
       } catch (err) {
-        console.error('JS OOP Error in setPropJSObject:', err);
-        if (DEBUG) console.dir({
-          action: 'setPropJSObject(error)',
-          error: err
-        });
+        console.error("JS OOP Error in setPropJSObject:", err);
+        if (DEBUG)
+          console.dir({
+            action: "setPropJSObject(error)",
+            error: err,
+          });
       }
     }
 
-    setPropJwArray({
-      PROP,
-      INSTANCE,
-      VALUE
-    }) {
-      if (DEBUG) console.dir({
-        action: 'setPropJwArray(entry)',
-        PROP,
-        INSTANCE,
-        VALUE
-      });
+    setPropJwArray({ PROP, INSTANCE, VALUE }) {
+      if (DEBUG)
+        console.dir({
+          action: "setPropJwArray(entry)",
+          PROP,
+          INSTANCE,
+          VALUE,
+        });
       const resolved = this._resolveInstanceHolder(INSTANCE);
       const holder = resolved.holder;
       const target = resolved.value;
-      const value = (VALUE instanceof JSObject || (VALUE && typeof VALUE === 'object' && (VALUE._jsoopLookupMarker || VALUE.customId))) ? VALUE : this._convertToNativeValue(VALUE);
+      const value =
+        VALUE instanceof JSObject ||
+        (VALUE && typeof VALUE === "object" && (VALUE._jsoopLookupMarker || VALUE.customId))
+          ? VALUE
+          : this._convertToNativeValue(VALUE);
 
       try {
         // If this is a jwArray wrapper (the original object), write to its .array
         if (target && target instanceof jwArray.Type) {
           target.array[PROP] = value;
-        } else if (INSTANCE && INSTANCE.customId === 'jwArray' && INSTANCE.array) {
+        } else if (INSTANCE && INSTANCE.customId === "jwArray" && INSTANCE.array) {
           // fallback in case wrapper was passed differently
           INSTANCE.array[PROP] = value;
-        } else if (target && (typeof target === 'object' || typeof target === 'function')) {
+        } else if (target && (typeof target === "object" || typeof target === "function")) {
           target[PROP] = value;
         } else {
           const newObj = Object(target);
           newObj[PROP] = value;
           if (holder) holder.value = newObj;
-          else if (INSTANCE && typeof INSTANCE === 'object') INSTANCE.value = newObj;
+          else if (INSTANCE && typeof INSTANCE === "object") INSTANCE.value = newObj;
         }
-        if (DEBUG) console.dir({ action: 'setPropJwArray(done)', target: holder ? holder.value : target });
+        if (DEBUG) console.dir({ action: "setPropJwArray(done)", target: holder ? holder.value : target });
       } catch (err) {
-        console.error('JS OOP Error in setPropJwArray:', err);
-        if (DEBUG) console.dir({ action: 'setPropJwArray(error)', error: err });
+        console.error("JS OOP Error in setPropJwArray:", err);
+        if (DEBUG) console.dir({ action: "setPropJwArray(error)", error: err });
       }
     }
 
-    setPropDogeiscutObject({
-      PROP,
-      INSTANCE,
-      VALUE
-    }) {
-      if (DEBUG) console.dir({
-        action: 'setPropDogeiscutObject(entry)',
-        PROP,
-        INSTANCE,
-        VALUE
-      });
+    setPropDogeiscutObject({ PROP, INSTANCE, VALUE }) {
+      if (DEBUG)
+        console.dir({
+          action: "setPropDogeiscutObject(entry)",
+          PROP,
+          INSTANCE,
+          VALUE,
+        });
       const resolved = this._resolveInstanceHolder(INSTANCE);
       const holder = resolved.holder;
       const target = resolved.value;
-      const value = (VALUE instanceof JSObject || (VALUE && typeof VALUE === 'object' && (VALUE._jsoopLookupMarker || VALUE.customId))) ? VALUE : this._convertToNativeValue(VALUE);
+      const value =
+        VALUE instanceof JSObject ||
+        (VALUE && typeof VALUE === "object" && (VALUE._jsoopLookupMarker || VALUE.customId))
+          ? VALUE
+          : this._convertToNativeValue(VALUE);
 
       try {
         // If this is a dogeiscutObject wrapper (has map), update its map entries
-        if (target && target.customId === 'dogeiscutObject' && Array.isArray(target.map)) {
+        if (target && target.customId === "dogeiscutObject" && Array.isArray(target.map)) {
           // find existing key
           let found = false;
           for (let i = 0; i < target.map.length; i++) {
@@ -2932,7 +3826,7 @@
             }
           }
           if (!found) target.map.push([PROP, value]);
-        } else if (INSTANCE && INSTANCE.customId === 'dogeiscutObject' && Array.isArray(INSTANCE.map)) {
+        } else if (INSTANCE && INSTANCE.customId === "dogeiscutObject" && Array.isArray(INSTANCE.map)) {
           let found = false;
           for (let i = 0; i < INSTANCE.map.length; i++) {
             if (INSTANCE.map[i][0] === PROP) {
@@ -2942,60 +3836,58 @@
             }
           }
           if (!found) INSTANCE.map.push([PROP, value]);
-        } else if (target && (typeof target === 'object' || typeof target === 'function')) {
+        } else if (target && (typeof target === "object" || typeof target === "function")) {
           target[PROP] = value;
         } else {
           const newObj = Object(target);
           newObj[PROP] = value;
           if (holder) holder.value = newObj;
-          else if (INSTANCE && typeof INSTANCE === 'object') INSTANCE.value = newObj;
+          else if (INSTANCE && typeof INSTANCE === "object") INSTANCE.value = newObj;
         }
-        if (DEBUG) console.dir({ action: 'setPropDogeiscutObject(done)', target: holder ? holder.value : target });
+        if (DEBUG)
+          console.dir({ action: "setPropDogeiscutObject(done)", target: holder ? holder.value : target });
       } catch (err) {
-        console.error('JS OOP Error in setPropDogeiscutObject:', err);
-        if (DEBUG) console.dir({ action: 'setPropDogeiscutObject(error)', error: err });
+        console.error("JS OOP Error in setPropDogeiscutObject:", err);
+        if (DEBUG) console.dir({ action: "setPropDogeiscutObject(error)", error: err });
       }
     }
 
-    stringify({
-      VALUE
-    }) {
+    stringify({ VALUE }) {
       try {
         let inner = VALUE;
 
-        if (VALUE && typeof VALUE === 'object' && VALUE.customId === 'jsObject') {
+        if (VALUE && typeof VALUE === "object" && VALUE.customId === "jsObject") {
           inner = VALUE.value;
         } else if (VALUE instanceof JSObject) {
           inner = VALUE.value;
         } else {
           try {
             inner = JSON.parse(VALUE);
-          } catch { }
+          } catch {}
         }
         try {
           return safeSerialize(inner);
         } catch (e) {
-          if (typeof inner === 'function') return inner.toString();
+          if (typeof inner === "function") return inner.toString();
           return String(inner);
         }
       } catch (err) {
-        console.error('JS OOP Error in stringify:', err);
-        if (DEBUG) console.dir({
-          action: 'stringify(error)',
-          error: err
-        });
+        console.error("JS OOP Error in stringify:", err);
+        if (DEBUG)
+          console.dir({
+            action: "stringify(error)",
+            error: err,
+          });
         return String(VALUE);
       }
     }
 
-    typeName({
-      INSTANCE
-    }) {
+    typeName({ INSTANCE }) {
       const v = this._getActualValue(this._convertToNativeValue(INSTANCE)); // Resolve instance reference
-      if (v === null) return 'null';
-      if (v === undefined) return 'undefined';
-      if (typeof v === 'function') return `function ${v.name || '(anonymous)'}`;
-      if (typeof v === 'object') return v.constructor && v.constructor.name ? v.constructor.name : 'Object';
+      if (v === null) return "null";
+      if (v === undefined) return "undefined";
+      if (typeof v === "function") return `function ${v.name || "(anonymous)"}`;
+      if (typeof v === "object") return v.constructor && v.constructor.name ? v.constructor.name : "Object";
       return typeof v;
     }
   }
