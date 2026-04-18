@@ -371,6 +371,7 @@
       // User-configurable settings (defaults)
       this.settings = {
         automaticArgArrayToNativeConversion: true, // Automatic arg array -> native conversion
+        automaticClassMethodCallArgsObjectToDogeiscutObject: true,
         preferCompiledClassArgStack: true, // Prefer compiled class-arg stack paths
         wrapNewInstances: true, // Whether to wrap `new` instances in JSObject
         enableDebugLogging: false, // Toggle verbose debug logging
@@ -818,7 +819,8 @@
         let ctorFn = null;
         for (const m of methods || []) {
           const name = String(m.name || "");
-          const params = Array.isArray(m.params) ? m.params.map((p) => String(p)) : [];
+          console.dir(m);
+          const params = m.params; //Array.isArray(m.params) ? m.params.map((p) => String(p)) : [];
           const type = String(m.type || "");
 
           const cleanName = name.startsWith("#") ? name.slice(1) : name;
@@ -1196,7 +1198,7 @@
         argObject[key] =
           value === undefined && Object.prototype.hasOwnProperty.call(defaults, key) ? defaults[key] : value;
       }
-      console.log(args)
+      //console.log(args)
 
       const runtime = vm.runtime;
       const Thread = vm.exports.Thread;
@@ -1261,7 +1263,7 @@
       // Attach args to caller thread and pass it directly to the factory
       const _prevJsoopArgs = callerThread.jsoopArgs;
       const _prevProcedures = callerThread.procedures;
-      callerThread.jsoopArgs = argObject;
+      callerThread.jsoopArgs = _prevJsoopArgs;//argObject;
       callerThread._jsoopThis = thisArg; // Expose the factory's `this` as well for use in procedures
 
       // If a procedures object was provided (often an object of stringified
@@ -1965,7 +1967,7 @@
         },
         {
           opcode: "classMethod",
-          text: "[METHOD_TYPE] method [NAME] args [ARGS]",
+          text: "[METHOD_TYPE] method [NAME] named args [ARGS] [ARGSREPORTER]",
           blockType: Scratch.BlockType.COMMAND,
           branches: [{}],
           arguments: {
@@ -1978,7 +1980,10 @@
               type: Scratch.ArgumentType.STRING,
               defaultValue: "myMethod",
             },
-            ARGS: jwArray.Argument,
+            ARGS: JSObjectDescriptor.ArgumentNonCheck,
+            ARGSREPORTER: {
+              fillIn: "argsReporter",
+            },
           },
         },
         {
@@ -2309,6 +2314,7 @@
             acceptReporters: false,
             items: [
               "Automatic arg array to native conversion",
+              "Automatic class method call args object to dogeiscutObject conversion"
               // hidden for now, not sure if i'll ever allow them to be set
               //"Prefer compiled class-arg stack",
               //"Wrap new instances in JSObject",
@@ -2333,13 +2339,11 @@
           classMethod: (generator, block) => {
             return {
               kind: "stack",
-              type: block.fields.METHOD_TYPE.value,
+              type: block?.fields?.METHOD_TYPE?.value,
               name: generator.descendInputOfBlock(block, "NAME"),
               args: generator.descendInputOfBlock(block, "ARGS"),
               substack: generator.descendSubstack(block, "SUBSTACK"),
-              substackTopBlockId: vm.runtime.targets.find(
-                (t) => t.blocks._blocks[block.inputs.SUBSTACK.block]?.id !== undefined,
-              ).blocks._blocks[block.inputs.SUBSTACK.block].id,
+              substackTopBlockId: vm.runtime.targets.find(t => t.blocks._blocks[block.inputs.SUBSTACK?.block]?.id !== undefined).blocks._blocks[block.inputs.SUBSTACK.block].id || null,
             };
           },
           new: (generator, block) => {
@@ -2420,7 +2424,7 @@
           }),
           setSetting: (generator, block) => ({
             kind: "stack",
-            SETTING: generator.descendInputOfBlock(block, "SETTING"),
+            SETTING: block.fields.SETTING.value,
             VALUE: generator.descendInputOfBlock(block, "VALUE"),
           }),
           constantMath: (generator, block) => ({ kind: "input" }),
@@ -2622,7 +2626,8 @@
             let factorySource = "";
 
             let firstBlockId = node.substackTopBlockId;
-            if (node.substack && node.substack.length > 0) {
+            console.log(node)
+            if (firstBlockId) {
               //const firstBlock = node.substack[0];
               //firstBlockId = firstBlock && firstBlock.id ? firstBlock.id : null;
               try {
@@ -2674,18 +2679,20 @@
                     } else if (js && typeof js.toString === "function") {
                       factorySource = js.toString();
                     } else {
-                      factorySource = child.source || "";
+                      factorySource = child.source || "(function empty(thread) {return;})";
                     }
                   } else {
-                    factorySource = child.source || "";
+                    factorySource = child.source || "(function empty(thread) {return;})";
                   }
                 } else {
-                  factorySource = child.source || "";
+                  factorySource = child.source || "(function empty(thread) {return;})";
                 }
               } catch (e) {
                 console.error("classMethod IR/JS compilation failed for firstBlockId", firstBlockId, e);
-                factorySource = "";
+                factorySource = child.source || "(function empty(thread) {return;})";
               }
+            } else {
+              factorySource = child.source || "(function empty(thread) {return;})";
             }
 
             const type = node.type;
@@ -2693,6 +2700,7 @@
             const argsExpr = node.args
               ? compiler.descendInput(node.args).asUnknown()
               : "new vm.jwArray.Type([])";
+              //console.log("FFFOOOFOFOFOFOF", argsExpr, node, compiler);
 
             const tempVar = compiler.localVariables.next();
             const paramsVar = compiler.localVariables.next();
@@ -2701,20 +2709,19 @@
             compiler.source += `let ${tempVar} = ${argsExpr};\n`;
             compiler.source += `let ${paramsVar} = [];\n`;
             compiler.source += `let ${defaultsVar} = {};\n`;
-            compiler.source += `if (${tempVar} instanceof vm.jwArray.Type) {\n`;
-            compiler.source += `  for (const item of ${tempVar}.array) {\n`;
-            compiler.source += `    let argObj = item instanceof vm.runtime.ext_jsoop.JSObject ? item.value : item;\n`;
-            compiler.source += `    if (argObj && typeof argObj === 'object' && argObj._jsoopLookupMarker && argObj.lookupId) {\n`;
-            compiler.source += `      argObj = vm.runtime.ext_jsoop._getFromLookupTable(argObj.lookupId);\n`;
-            compiler.source += `      if (argObj instanceof vm.runtime.ext_jsoop.JSObject) argObj = argObj.value;\n`;
-            compiler.source += `    }\n`;
-            compiler.source += `    if (argObj && typeof argObj === 'object') {\n`;
-            compiler.source += `      const keys = Object.keys(argObj);\n`;
-            compiler.source += `      const key = keys[0];\n`;
-            compiler.source += `      if (key !== undefined) {\n`;
-            compiler.source += `        ${paramsVar}.push(String(key));\n`;
-            compiler.source += `        ${defaultsVar}[String(key)] = argObj[key];\n`;
-            compiler.source += `      }\n`;
+            compiler.source += `if (${tempVar} instanceof vm.jwArray.Type) ${tempVar} = ${tempVar}.array;`;
+            compiler.source += `for (const item of ${tempVar}) {\n`;
+            compiler.source += `  let argObj = item instanceof vm.runtime.ext_jsoop.JSObject ? item.value : item;\n`;
+            compiler.source += `  if (argObj && typeof argObj === 'object' && argObj._jsoopLookupMarker && argObj.lookupId) {\n`;
+            compiler.source += `    argObj = vm.runtime.ext_jsoop._getFromLookupTable(argObj.lookupId);\n`;
+            compiler.source += `    if (argObj instanceof vm.runtime.ext_jsoop.JSObject) argObj = argObj.value;\n`;
+            compiler.source += `  }\n`;
+            compiler.source += `  if (argObj && typeof argObj === 'object') {\n`;
+            compiler.source += `    const keys = Object.keys(argObj);\n`;
+            compiler.source += `    const key = keys[0];\n`;
+            compiler.source += `    if (key !== undefined) {\n`;
+            compiler.source += `      ${paramsVar}.push(String(key));\n`;
+            compiler.source += `      ${defaultsVar}[String(key)] = argObj[key];\n`;
             compiler.source += `    }\n`;
             compiler.source += `  }\n`;
             compiler.source += `}\n`;
@@ -2722,7 +2729,7 @@
             compiler.source += `if (topStack) {\n`;
             compiler.source += `  topStack.push({\n`;
             compiler.source += `    name: ${name},\n`;
-            compiler.source += `    params: ${paramsVar},\n`;
+            compiler.source += `    params: ${tempVar},\n`;
             compiler.source += `    defaults: ${defaultsVar},\n`;
             // Wrap the compiled method body into a standalone factory
             // expression so it can be evaluated later without needing
@@ -2877,7 +2884,9 @@
           },
           classArgSpreadStack: (node, compiler, imports) => {
             const name = node.NAME ? compiler.descendInput(node.NAME).asString() : "";
-            const key = JSON.stringify("..." + name);
+            console.log(name)
+            const key = JSON.stringify("..." + JSON.parse(name));
+            console.log(key)
             compiler.source += `try { const topArgs = thread._jsoopArgsStack?.[thread._jsoopArgsStack.length-1]; if (topArgs) { if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.preferCompiledClassArgStack === false) { topArgs.push(new vm.runtime.ext_jsoop.JSObject({ [${key}]: undefined })); } else { topArgs.push({ [${key}]: undefined }); } } } catch(_) {}\n`;
           },
 
@@ -2896,7 +2905,6 @@
             compiler.source += `try { return ((vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion === false) ? ${arrVar} : (${arrVar}.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }))); } catch(e) { return ${arrVar}; } })())`;
             const result = compiler.source;
             compiler.source = originalSource;
-            console.log(imports.TypedInput);
             return new imports.TypedInput(result, imports.TYPE_UNKNOWN);
           },
           constantMath: (node, compiler, imports) =>
@@ -2978,15 +2986,18 @@
     if (!Array.isArray(args)) args = [args];
     try { if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) { args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }); } } catch(e) {}
     if (actualFn && actualFn._jsoopFactory) {
-      const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+      const clonedThread = thread //typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
       if (!clonedThread) return undefined;
-      clonedThread.jsoopArgs = {};
-      try { clonedThread._jsoopCallerTarget = target; } catch (_) {}
-      try { clonedThread._jsoopMethodTarget = method; } catch (_) {}
-      const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams : [];
-      for (let i = 0; i < paramNames.length; i++) {
-        clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
-      }
+
+       clonedThread.jsoopArgs = {};
+       clonedThread._jsoopCallerTarget = target;
+       clonedThread._jsoopMethodTarget = methodTarget;
+       window.fooo = actualFn._jsoopParams;
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams.map(p => JSON.parse(Object.keys(p)[0])) : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i] || actualFn._jsoopParams[i]['"' + paramNames[i] + '"'];
+       }
+       if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
       try { actualFn._jsoopOwnerTarget = method; } catch (_) {}
       return yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, thread, args));
     }
@@ -3018,15 +3029,18 @@
     if (!Array.isArray(args)) args = [args];
       try { if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) { args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }); } } catch(e) {}
       if (actualFn && actualFn._jsoopFactory) {
-      const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
-      if (!clonedThread) return;
-      clonedThread.jsoopArgs = {};
-      try { clonedThread._jsoopCallerTarget = target; } catch (_) {}
-      try { clonedThread._jsoopMethodTarget = method; } catch (_) {}
-      const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams : [];
-      for (let i = 0; i < paramNames.length; i++) {
-        clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
-      }
+      const clonedThread = thread //typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+      if (!clonedThread) return undefined;
+
+       clonedThread.jsoopArgs = {};
+       clonedThread._jsoopCallerTarget = target;
+       clonedThread._jsoopMethodTarget = methodTarget;
+       window.fooo = actualFn._jsoopParams;
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams.map(p => JSON.parse(Object.keys(p)[0])) : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i] || actualFn._jsoopParams[i]['"' + paramNames[i] + '"'];
+       }
+       if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
       try { actualFn._jsoopOwnerTarget = method; } catch (_) {}
       yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, thread, args));
       return;
@@ -3062,15 +3076,18 @@
     if (!Array.isArray(args)) args = [args];
       try { if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) { args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }); } } catch(e) {}
       if (actualFunc && actualFunc._jsoopFactory) {
-      const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+      const clonedThread = thread //typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
       if (!clonedThread) return undefined;
-      clonedThread.jsoopArgs = {};
-      try { clonedThread._jsoopCallerTarget = target; } catch (_) {}
-      try { clonedThread._jsoopMethodTarget = func; } catch (_) {}
-      const paramNames = Array.isArray(actualFunc._jsoopParams) ? actualFunc._jsoopParams : [];
-      for (let i = 0; i < paramNames.length; i++) {
-        clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
-      }
+
+       clonedThread.jsoopArgs = {};
+       clonedThread._jsoopCallerTarget = target;
+       clonedThread._jsoopMethodTarget = methodTarget;
+       window.fooo = actualFn._jsoopParams;
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams.map(p => JSON.parse(Object.keys(p)[0])) : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i] || actualFn._jsoopParams[i]['"' + paramNames[i] + '"'];
+       }
+       if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
       try { actualFunc._jsoopOwnerTarget = func; } catch (_) {}
       return yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, thread, args));
     }
@@ -3100,15 +3117,18 @@
     if (!Array.isArray(args)) args = [args];
       try { if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) { args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }); } } catch(e) {}
       if (actualFunc && actualFunc._jsoopFactory) {
-      const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
-      if (!clonedThread) return;
-      clonedThread.jsoopArgs = {};
-      try { clonedThread._jsoopCallerTarget = target; } catch (_) {}
-      try { clonedThread._jsoopMethodTarget = func; } catch (_) {}
-      const paramNames = Array.isArray(actualFunc._jsoopParams) ? actualFunc._jsoopParams : [];
-      for (let i = 0; i < paramNames.length; i++) {
-        clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
-      }
+      const clonedThread = thread //typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+      if (!clonedThread) return undefined;
+
+       clonedThread.jsoopArgs = {};
+       clonedThread._jsoopCallerTarget = target;
+       clonedThread._jsoopMethodTarget = methodTarget;
+       window.fooo = actualFn._jsoopParams;
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams.map(p => JSON.parse(Object.keys(p)[0])) : [];
+       for (let i = 0; i < paramNames.length; i++) {
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i] || actualFn._jsoopParams[i]['"' + paramNames[i] + '"'];
+       }
+       if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
       try { actualFunc._jsoopOwnerTarget = func; } catch (_) {}
       yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, thread, args));
       return;
@@ -3150,22 +3170,23 @@
       try { if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) { args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }); } } catch(e) {}
 
     if (actualFn && actualFn._jsoopFactory) {
-       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+      const clonedThread = thread //typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
       if (!clonedThread) return undefined;
 
        clonedThread.jsoopArgs = {};
        clonedThread._jsoopCallerTarget = target;
        clonedThread._jsoopMethodTarget = methodTarget;
-
-       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams : [];
+       window.fooo = actualFn._jsoopParams;
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams.map(p => JSON.parse(Object.keys(p)[0])) : [];
        for (let i = 0; i < paramNames.length; i++) {
-         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i] || actualFn._jsoopParams[i]['"' + paramNames[i] + '"'];
        }
+       if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
 
        actualFn._jsoopOwnerTarget = methodTarget;
       
        const result = yield* waitPromise(
-         vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, thread, args)
+         vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, clonedThread, args)
        );
        return result;
      }
@@ -3203,15 +3224,18 @@
     if (!Array.isArray(args)) args = [args];
     try { if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) { args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }); } } catch(e) {}
      if (actualFn && actualFn._jsoopFactory) {
-       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
-       if (!clonedThread) return;
+       const clonedThread = thread //typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+      if (!clonedThread) return undefined;
+
        clonedThread.jsoopArgs = {};
-       try { clonedThread._jsoopCallerTarget = target; } catch (_) {}
-       try { clonedThread._jsoopMethodTarget = method; } catch (_) {}
-       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams : [];
+       clonedThread._jsoopCallerTarget = target;
+       clonedThread._jsoopMethodTarget = methodTarget;
+       window.fooo = actualFn._jsoopParams;
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams.map(p => JSON.parse(Object.keys(p)[0])) : [];
        for (let i = 0; i < paramNames.length; i++) {
-         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i] || actualFn._jsoopParams[i]['"' + paramNames[i] + '"'];
        }
+       if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
        try { actualFn._jsoopOwnerTarget = method; } catch (_) {}
        yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, thread, args));
        return;
@@ -3244,15 +3268,18 @@
     if (!Array.isArray(args)) args = [args];
       try { if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) { args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }); } } catch(e) {}
     if (actualFunc && actualFunc._jsoopFactory) {
-       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+       const clonedThread = thread //typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
       if (!clonedThread) return undefined;
+
        clonedThread.jsoopArgs = {};
-       try { clonedThread._jsoopCallerTarget = target; } catch (_) {}
-       try { clonedThread._jsoopMethodTarget = func; } catch (_) {}
-       const paramNames = Array.isArray(actualFunc._jsoopParams) ? actualFunc._jsoopParams : [];
+       clonedThread._jsoopCallerTarget = target;
+       clonedThread._jsoopMethodTarget = methodTarget;
+       window.fooo = actualFn._jsoopParams;
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams.map(p => JSON.parse(Object.keys(p)[0])) : [];
        for (let i = 0; i < paramNames.length; i++) {
-         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i] || actualFn._jsoopParams[i]['"' + paramNames[i] + '"'];
        }
+       if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
        try { actualFunc._jsoopOwnerTarget = func; } catch (_) {}
       const result = yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, thread, args));
       return result;
@@ -3287,15 +3314,18 @@
     if (!Array.isArray(args)) args = [args];
       try { if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) { args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }); } } catch(e) {}
     if (actualFunc && actualFunc._jsoopFactory) {
-       const clonedThread = typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
-       if (!clonedThread) return;
+       const clonedThread = thread //typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
+      if (!clonedThread) return undefined;
+
        clonedThread.jsoopArgs = {};
-       try { clonedThread._jsoopCallerTarget = target; } catch (_) {}
-       try { clonedThread._jsoopMethodTarget = func; } catch (_) {}
-       const paramNames = Array.isArray(actualFunc._jsoopParams) ? actualFunc._jsoopParams : [];
+       clonedThread._jsoopCallerTarget = target;
+       clonedThread._jsoopMethodTarget = methodTarget;
+       window.fooo = actualFn._jsoopParams;
+       const paramNames = Array.isArray(actualFn._jsoopParams) ? actualFn._jsoopParams.map(p => JSON.parse(Object.keys(p)[0])) : [];
        for (let i = 0; i < paramNames.length; i++) {
-         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i];
+         clonedThread.jsoopArgs[String(paramNames[i] || i)] = args[i] || actualFn._jsoopParams[i]['"' + paramNames[i] + '"'];
        }
+       if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
        try { actualFunc._jsoopOwnerTarget = func; } catch (_) {}
        yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, thread, args));
        return;
@@ -3308,18 +3338,19 @@
    })();`;
           },
           setSetting: (node, compiler, imports) => {
-            const settingExpr = compiler.descendInput(node.SETTING).asString();
+            const settingExpr = node.SETTING.toString();
             const valueExpr = compiler.descendInput(node.VALUE).asUnknown();
             const map = {
               "Automatic arg array to native conversion": "automaticArgArrayToNativeConversion",
+              "Automatic class method call args object to dogeiscutObject conversion": "automaticClassMethodCallArgsObjectToDogeiscutObject", // <-- ADD THIS
               "Prefer compiled class-arg stack": "preferCompiledClassArgStack",
               "Wrap new instances in JSObject": "wrapNewInstances",
               "Enable debug logging": "enableDebugLogging",
               "Use lookup table by default": "useLookupTableByDefault",
             };
-            compiler.source += `try { const s = ${settingExpr}; const v = !!(${valueExpr}); const _map = ${JSON.stringify(
+            compiler.source += `try { const s = ${JSON.stringify(settingExpr)}; const v = !!(${valueExpr}); const _map = ${JSON.stringify(
               map,
-            )}; const key = _map[s] || s; try { if (vm && vm.runtime && vm.runtime.ext_jsoop) { vm.runtime.ext_jsoop.settings = vm.runtime.ext_jsoop.settings || {}; vm.runtime.ext_jsoop.settings[key] = v; if (key === 'useLookupTableByDefault') try { vm.runtime.ext_jsoop._lookupTableEnabled = !!v; } catch(_) {} if (key === 'enableDebugLogging') try { DEBUG = !!v; } catch(_) {} } } catch(_) {} } catch(_) {}
+            )}; const key = _map[s] || s; try { if (vm && vm.runtime && vm.runtime.ext_jsoop) { vm.runtime.ext_jsoop.settings = vm.runtime.ext_jsoop.settings || {}; vm.runtime.ext_jsoop.settings[key] = !!v; console.log(vm.runtime.ext_jsoop.settings[key]); if (key === 'useLookupTableByDefault') try { vm.runtime.ext_jsoop._lookupTableEnabled = !!v; } catch(_) {} if (key === 'enableDebugLogging') try { DEBUG = !!v; } catch(_) {} } } catch(_) {} } catch(_) {}
 `;
           },
         },
@@ -4386,6 +4417,7 @@
       try {
         const map = {
           "Automatic arg array to native conversion": "automaticArgArrayToNativeConversion",
+          "Automatic class method call args object to dogeiscutObject conversion": "automaticClassMethodCallArgsObjectToDogeiscutObject", // <-- ADD THIS
           "Prefer compiled class-arg stack": "preferCompiledClassArgStack",
           "Wrap new instances in JSObject": "wrapNewInstances",
           "Enable debug logging": "enableDebugLogging",
