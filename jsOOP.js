@@ -9,7 +9,7 @@
 
   const vm = Scratch.vm;
 
-  let DEBUG = false;
+  let DEBUG = !false;
 
   const isNode = typeof process !== "undefined" && !!process.versions && !!process.versions.node; // This could be simpler but this is the most "official" way to check
 
@@ -1149,9 +1149,21 @@
                           : undefined;
                   if (ctorFn && ctorFn._jsoopFactory) {
                     try {
-                      // Fire-and-forget the factory invocation; it will schedule
-                      // a VM thread to run any generator code.
-                      vm.runtime.ext_jsoop._invokeJsoopFactory(ctorFn, this, callerThread, ctorArgs);
+                      // Invoke factory and record its completion promise on the
+                      // instance so callers (e.g. the `new` block) can wait
+                      // until initialization is finished before using the
+                      // newly-constructed object.
+                      const _p = vm.runtime.ext_jsoop._invokeJsoopFactory(ctorFn, this, callerThread, ctorArgs);
+                      try {
+                        if (_p && typeof _p.then === "function") {
+                          Object.defineProperty(this, "_jsoopInitPromise", {
+                            value: _p,
+                            writable: true,
+                            configurable: true,
+                            enumerable: false,
+                          });
+                        }
+                      } catch (_) {}
                     } catch (e) {
                       console.error("constructor invocation failed", e);
                     }
@@ -1329,7 +1341,11 @@
         if (isSpread) {
           const remainder = [];
           for (let j = i; j < args.length; j++) {
-            remainder.push(this._getActualValue(args[j]));
+            try {
+              remainder.push(this._convertToNativeValue(this._getActualValue(args[j])));
+            } catch (e) {
+              remainder.push(this._getActualValue(args[j]));
+            }
           }
           const useJwArray = this.settings && this.settings.automaticSpreadArgInClassArgsObjectToJwArrayConversion !== false;
           argObject[String(name)] = useJwArray && typeof vm !== 'undefined' && vm.jwArray && typeof vm.jwArray.Type === 'function' ? new vm.jwArray.Type(remainder) : remainder;
@@ -1407,10 +1423,25 @@
       const _prevProcedures = callerThread.procedures;
       callerThread.jsoopArgs = (typeof _prevJsoopArgs === 'undefined') ? argObject : _prevJsoopArgs;
       // Normalize legacy/mis-quoted keys in pre-provided jsoopArgs (backward compatibility)
+      // Only normalize when `jsoopArgs` is a plain object literal. Avoid
+      // converting wrapper instances (jwArray.Type, dogeiscutObject.Type, JSObject, etc.)
       try {
-        if (callerThread.jsoopArgs && typeof callerThread.jsoopArgs === 'object' && !Array.isArray(callerThread.jsoopArgs)) {
+        const _argsCandidate = callerThread.jsoopArgs;
+        const proto = _argsCandidate ? Object.getPrototypeOf(_argsCandidate) : null;
+        const looksLikePlainObject =
+          _argsCandidate && typeof _argsCandidate === 'object' && !Array.isArray(_argsCandidate) &&
+          (proto === Object.prototype || proto === null);
+        const isWrapperLike =
+          !_argsCandidate
+            ? false
+            : (_argsCandidate instanceof this.JSObject) ||
+              (typeof vm !== 'undefined' && vm && vm.jwArray && _argsCandidate instanceof vm.jwArray.Type) ||
+              (typeof vm !== 'undefined' && vm && vm.dogeiscutObject && _argsCandidate instanceof vm.dogeiscutObject.Type) ||
+              Boolean(_argsCandidate && (_argsCandidate.customId || _argsCandidate._jsoopLookupMarker));
+
+        if (looksLikePlainObject && !isWrapperLike) {
           const normalized = {};
-          for (const k of Object.keys(callerThread.jsoopArgs)) {
+          for (const k of Object.keys(_argsCandidate)) {
             let nk = k;
             try {
               // If the key itself is a JSON string, parse it
@@ -1434,7 +1465,7 @@
                 nk = t;
               }
             } catch (_) { nk = String(nk); }
-            normalized[nk] = callerThread.jsoopArgs[k];
+            normalized[nk] = _argsCandidate[k];
           }
           callerThread.jsoopArgs = normalized;
         }
@@ -1530,7 +1561,7 @@
         }
       };
       callerThread._execThread = execThread; // Expose execThread on itself for access inside the generator(it's thread object is the caller, not the execThread)
-
+      //callerThread._jwArrayForEach = ["foo", "bar", "baz"]; // Expose Array.prototype.forEach for use in compiled code without needing to look up on the caller thread's jsoopArgs
       // Register thread
       runtime.threads.push(execThread);
       runtime.threadMap.set(execThread.getId(), execThread);
@@ -2708,6 +2739,46 @@
               ARGS: generator.descendInputOfBlock(block, "ARGS"),
             };
           },
+          // Property accessors / setters (IR entries for compiled emitters)
+          getProp: (generator, block) => {
+            return {
+              kind: "input",
+              PROP: generator.descendInputOfBlock(block, "PROP"),
+              INSTANCE: generator.descendInputOfBlock(block, "INSTANCE"),
+            };
+          },
+          setPropString: (generator, block) => {
+            return {
+              kind: "stack",
+              PROP: generator.descendInputOfBlock(block, "PROP"),
+              INSTANCE: generator.descendInputOfBlock(block, "INSTANCE"),
+              VALUE: generator.descendInputOfBlock(block, "VALUE"),
+            };
+          },
+          setPropJSObject: (generator, block) => {
+            return {
+              kind: "stack",
+              PROP: generator.descendInputOfBlock(block, "PROP"),
+              INSTANCE: generator.descendInputOfBlock(block, "INSTANCE"),
+              VALUE: generator.descendInputOfBlock(block, "VALUE"),
+            };
+          },
+          setPropJwArray: (generator, block) => {
+            return {
+              kind: "stack",
+              PROP: generator.descendInputOfBlock(block, "PROP"),
+              INSTANCE: generator.descendInputOfBlock(block, "INSTANCE"),
+              VALUE: generator.descendInputOfBlock(block, "VALUE"),
+            };
+          },
+          setPropDogeiscutObject: (generator, block) => {
+            return {
+              kind: "stack",
+              PROP: generator.descendInputOfBlock(block, "PROP"),
+              INSTANCE: generator.descendInputOfBlock(block, "INSTANCE"),
+              VALUE: generator.descendInputOfBlock(block, "VALUE"),
+            };
+          },
         },
         js: {
           classBuilder: (node, compiler, imports) => {
@@ -2967,7 +3038,7 @@
         if (!args) args = [];
         if (!Array.isArray(args)) args = [args];
         try {
-          if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) {
+          if (!ctor._jsoopFactory &&vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) {
             args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } });
           }
         } catch(e) {}
@@ -3020,7 +3091,7 @@
           },
           returnDataJsObject: (node, compiler, imports) => {
             if (compiler.inClassMethod) {
-              compiler.source += `(thread.justReturned = ${compiler.descendInput(node.DATA).asUnknown()}, thread._execThread.stopThisScript(), undefined);`;
+              compiler.source += `console.log(executeInCompatibilityLayer);(thread.justReturned = ${compiler.descendInput(node.DATA).asUnknown()}, thread._execThread.stopThisScript(), undefined);`;
             } else {
               compiler.source += `(thread.justReturned = ${compiler.descendInput(node.DATA).asUnknown()}, thread._execThread.stopThisScript(), '');`;
             }
@@ -3218,7 +3289,7 @@
      if (args instanceof vm.jwArray.Type) args = args.array;
     if (!args) args = [];
     if (!Array.isArray(args)) args = [args];
-    try { if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) { args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }); } } catch(e) {}
+    try { if (!actualFn._jsoopFactory && vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticArgArrayToNativeConversion !== false) { args = args.map(function(item){ try { return vm.runtime.ext_jsoop._convertToNativeValue(item); } catch(e) { return item; } }); } } catch(e) {}
     if (actualFn && actualFn._jsoopFactory) {
       const clonedThread = thread //typeof thread !== 'undefined' && thread && typeof thread.clone === 'function' ? thread.clone() : thread;
       if (!clonedThread) return undefined;
@@ -3300,10 +3371,10 @@
              }
            }
          }
-         if (isSpread) {
+            if (isSpread) {
            const remainder = Array.isArray(args) ? args.slice(i) : [];
            if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticSpreadArgInClassArgsObjectToJwArrayConversion !== false) {
-             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type(remainder);
+             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type((remainder || []).map(function(item){ try { return (vm && vm.runtime && vm.runtime.ext_jsoop && typeof vm.runtime.ext_jsoop._convertToNativeValue === 'function') ? vm.runtime.ext_jsoop._convertToNativeValue(item) : item; } catch(e) { return item; } }));
            } else {
              clonedThread.jsoopArgs[String(name)] = remainder;
            }
@@ -3314,7 +3385,7 @@
        }
        if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
       try { actualFn._jsoopOwnerTarget = method; } catch (_) {}
-      return yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, thread, args));
+      return yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, clonedThread, args));
     }
      const result = actualFn.apply(target, actualFn && actualFn._jsoopMethod ? [thread].concat(args) : args);
     if (result && typeof result.next === 'function') return yield* result;
@@ -3418,10 +3489,10 @@
              }
            }
          }
-         if (isSpread) {
+           if (isSpread) {
            const remainder = Array.isArray(args) ? args.slice(i) : [];
            if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticSpreadArgInClassArgsObjectToJwArrayConversion !== false) {
-             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type(remainder);
+             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type((remainder || []).map(function(item){ try { return (vm && vm.runtime && vm.runtime.ext_jsoop && typeof vm.runtime.ext_jsoop._convertToNativeValue === 'function') ? vm.runtime.ext_jsoop._convertToNativeValue(item) : item; } catch(e) { return item; } }));
            } else {
              clonedThread.jsoopArgs[String(name)] = remainder;
            }
@@ -3432,7 +3503,7 @@
        }
        if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
       try { actualFn._jsoopOwnerTarget = method; } catch (_) {}
-      yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, thread, args));
+      yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, clonedThread, args));
       return;
     }
      const result = actualFn.apply(target, actualFn && actualFn._jsoopMethod ? [thread].concat(args) : args);
@@ -3540,10 +3611,10 @@
              }
            }
          }
-         if (isSpread) {
+           if (isSpread) {
            const remainder = Array.isArray(args) ? args.slice(i) : [];
            if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticSpreadArgInClassArgsObjectToJwArrayConversion !== false) {
-             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type(remainder);
+             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type((remainder || []).map(function(item){ try { return (vm && vm.runtime && vm.runtime.ext_jsoop && typeof vm.runtime.ext_jsoop._convertToNativeValue === 'function') ? vm.runtime.ext_jsoop._convertToNativeValue(item) : item; } catch(e) { return item; } }));
            } else {
              clonedThread.jsoopArgs[String(name)] = remainder;
            }
@@ -3554,7 +3625,7 @@
        }
        if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
       try { actualFunc._jsoopOwnerTarget = func; } catch (_) {}
-      return yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, thread, args));
+      return yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, clonedThread, args));
     }
      const result = actualFunc.apply(target, actualFunc && actualFunc._jsoopMethod ? [thread].concat(args) : args);
     if (result && typeof result.next === 'function') return yield* result;
@@ -3652,7 +3723,7 @@
          if (isSpread) {
            const remainder = Array.isArray(args) ? args.slice(i) : [];
            if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticSpreadArgInClassArgsObjectToJwArrayConversion !== false) {
-             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type(remainder);
+             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type((remainder || []).map(function(item){ try { return (vm && vm.runtime && vm.runtime.ext_jsoop && typeof vm.runtime.ext_jsoop._convertToNativeValue === 'function') ? vm.runtime.ext_jsoop._convertToNativeValue(item) : item; } catch(e) { return item; } }));
            } else {
              clonedThread.jsoopArgs[String(name)] = remainder;
            }
@@ -3663,7 +3734,7 @@
        }
        if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
       try { actualFunc._jsoopOwnerTarget = func; } catch (_) {}
-      yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, thread, args));
+      yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, clonedThread, args));
       return;
     }
      const result = actualFunc.apply(target, actualFunc && actualFunc._jsoopMethod ? [thread].concat(args) : args);
@@ -3772,7 +3843,7 @@
          if (isSpread) {
            const remainder = Array.isArray(args) ? args.slice(i) : [];
            if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticSpreadArgInClassArgsObjectToJwArrayConversion !== false) {
-             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type(remainder);
+             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type((remainder || []).map(function(item){ try { return (vm && vm.runtime && vm.runtime.ext_jsoop && typeof vm.runtime.ext_jsoop._convertToNativeValue === 'function') ? vm.runtime.ext_jsoop._convertToNativeValue(item) : item; } catch(e) { return item; } }));
            } else {
              clonedThread.jsoopArgs[String(name)] = remainder;
            }
@@ -3894,7 +3965,7 @@
          if (isSpread) {
            const remainder = Array.isArray(args) ? args.slice(i) : [];
            if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticSpreadArgInClassArgsObjectToJwArrayConversion !== false) {
-             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type(remainder);
+             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type((remainder || []).map(function(item){ try { return (vm && vm.runtime && vm.runtime.ext_jsoop && typeof vm.runtime.ext_jsoop._convertToNativeValue === 'function') ? vm.runtime.ext_jsoop._convertToNativeValue(item) : item; } catch(e) { return item; } }));
            } else {
              clonedThread.jsoopArgs[String(name)] = remainder;
            }
@@ -3905,7 +3976,7 @@
        }
        if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
        try { actualFn._jsoopOwnerTarget = method; } catch (_) {}
-       yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, thread, args));
+      yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFn, target, clonedThread, args));
        return;
      }
      const result = actualFn.apply(target, actualFn && actualFn._jsoopMethod ? [thread].concat(args) : args);
@@ -4006,7 +4077,7 @@
          if (isSpread) {
            const remainder = Array.isArray(args) ? args.slice(i) : [];
            if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticSpreadArgInClassArgsObjectToJwArrayConversion !== false) {
-             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type(remainder);
+             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type((remainder || []).map(function(item){ try { return (vm && vm.runtime && vm.runtime.ext_jsoop && typeof vm.runtime.ext_jsoop._convertToNativeValue === 'function') ? vm.runtime.ext_jsoop._convertToNativeValue(item) : item; } catch(e) { return item; } }));
            } else {
              clonedThread.jsoopArgs[String(name)] = remainder;
            }
@@ -4017,7 +4088,7 @@
        }
        if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
        try { actualFunc._jsoopOwnerTarget = func; } catch (_) {}
-      const result = yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, thread, args));
+      const result = yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, clonedThread, args));
       return result;
      }
      const result = actualFunc.apply(target, actualFunc && actualFunc._jsoopMethod ? [thread].concat(args) : args);
@@ -4120,7 +4191,7 @@
          if (isSpread) {
            const remainder = Array.isArray(args) ? args.slice(i) : [];
            if (vm && vm.runtime && vm.runtime.ext_jsoop && vm.runtime.ext_jsoop.settings && vm.runtime.ext_jsoop.settings.automaticSpreadArgInClassArgsObjectToJwArrayConversion !== false) {
-             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type(remainder);
+             clonedThread.jsoopArgs[String(name)] = new vm.jwArray.Type((remainder || []).map(function(item){ try { return (vm && vm.runtime && vm.runtime.ext_jsoop && typeof vm.runtime.ext_jsoop._convertToNativeValue === 'function') ? vm.runtime.ext_jsoop._convertToNativeValue(item) : item; } catch(e) { return item; } }));
            } else {
              clonedThread.jsoopArgs[String(name)] = remainder;
            }
@@ -4131,7 +4202,7 @@
        }
        if (vm.runtime.ext_jsoop.settings.automaticClassMethodCallArgsObjectToDogeiscutObject) clonedThread.jsoopArgs = new vm.dogeiscutObject.Type(clonedThread.jsoopArgs);
        try { actualFunc._jsoopOwnerTarget = func; } catch (_) {}
-       yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, thread, args));
+      yield* waitPromise(vm.runtime.ext_jsoop._invokeJsoopFactory(actualFunc, target, clonedThread, args));
        return;
      }
      const result = actualFunc.apply(target, actualFunc && actualFunc._jsoopMethod ? [thread].concat(args) : args);
@@ -4156,6 +4227,179 @@
             compiler.source += `try { const s = ${JSON.stringify(settingExpr)}; const v = !!(${valueExpr}); const _map = ${JSON.stringify(
               map,
             )}; const key = _map[s] || s; try { if (vm && vm.runtime && vm.runtime.ext_jsoop) { vm.runtime.ext_jsoop.settings = vm.runtime.ext_jsoop.settings || {}; vm.runtime.ext_jsoop.settings[key] = !!v; console.log(vm.runtime.ext_jsoop.settings[key]); if (key === 'useLookupTableByDefault') try { vm.runtime.ext_jsoop._lookupTableEnabled = !!v; } catch(_) {} if (key === 'enableDebugLogging') try { DEBUG = !!v; } catch(_) {} } } catch(_) {} } catch(_) {}
+`;
+          },
+          // Compile-time getter for properties — emit inline compiled code
+          getProp: (node, compiler, imports) => {
+            const propExpr = compiler.descendInput(node.PROP).asString();
+            const instanceExpr = compiler.descendInput(node.INSTANCE).asUnknown();
+            const src = `(() => {
+  try {
+    const _inst = ${instanceExpr};
+    let _holder = null;
+    let _target;
+    if (_inst instanceof vm.runtime.ext_jsoop.JSObject) { _holder = _inst; _target = _inst.value; }
+    else if (_inst && typeof _inst === 'object' && _inst._jsoopLookupMarker && _inst.lookupId) {
+      let _found = vm.runtime.ext_jsoop._getFromLookupTable(_inst.lookupId);
+      if (_found instanceof vm.runtime.ext_jsoop.JSObject) { _holder = _found; _target = _found.value; } else { _target = _found; }
+    } else { _target = _inst; }
+    const _val = _target != null ? _target[${propExpr}] : undefined;
+    if (_val !== null && _val !== undefined && (typeof _val === 'object' || typeof _val === 'function')) {
+      try {
+        const _jsobj = new vm.runtime.ext_jsoop.JSObject(_val);
+        return vm.runtime.ext_jsoop._storeInLookupTable(_jsobj);
+      } catch (_) {
+        try { return vm.runtime.ext_jsoop._wrapForOtherExtensions(vm.runtime.ext_jsoop.JSObject.toType(_val)); } catch (_) { return vm.runtime.ext_jsoop.JSObject.toType(_val); }
+      }
+    }
+    try { return vm.runtime.ext_jsoop._convertToNativeValue(_val); } catch (_) { return _val; }
+  } catch (e) {
+    return "[Error: " + String(e) + "]";
+  }
+})()`;
+            return new imports.TypedInput(src, imports.TYPE_UNKNOWN);
+          },
+          // Compile-time setters: emit inline compiled code matching runtime logic
+          setPropString: (node, compiler, imports) => {
+            const propExpr = compiler.descendInput(node.PROP).asString();
+            const instanceExpr = compiler.descendInput(node.INSTANCE).asUnknown();
+            const valueExpr = compiler.descendInput(node.VALUE).asUnknown();
+            compiler.source += `try {
+  const _inst = ${instanceExpr};
+  let _holder = null;
+  let _target;
+  if (_inst instanceof vm.runtime.ext_jsoop.JSObject) { _holder = _inst; _target = _inst.value; }
+  else if (_inst && typeof _inst === 'object' && _inst._jsoopLookupMarker && _inst.lookupId) {
+    let _found = vm.runtime.ext_jsoop._getFromLookupTable(_inst.lookupId);
+    if (_found instanceof vm.runtime.ext_jsoop.JSObject) { _holder = _found; _target = _found.value; } else { _target = _found; }
+  } else { _target = _inst; }
+  let parsed;
+  try { parsed = JSON.parse(${valueExpr}); } catch {
+    const t = ${valueExpr} && ${valueExpr}.trim();
+    if (/^-?\\d+(\\.\\d+)?$/.test(t)) parsed = Number(t);
+    else if (t === "true") parsed = true;
+    else if (t === "false") parsed = false;
+    else parsed = ${valueExpr};
+  }
+  if (_target && (typeof _target === 'object' || typeof _target === 'function')) {
+    _target[${propExpr}] = parsed;
+  } else {
+    const _newObj = Object(_target);
+    _newObj[${propExpr}] = parsed;
+    if (_holder) _holder.value = _newObj;
+    else if (_inst && typeof _inst === 'object') _inst.value = _newObj;
+  }
+} catch (e) { try { console.error(e); } catch(_) {} }
+`;
+          },
+          setPropJSObject: (node, compiler, imports) => {
+            const propExpr = compiler.descendInput(node.PROP).asString();
+            const instanceExpr = compiler.descendInput(node.INSTANCE).asUnknown();
+            const valueExpr = compiler.descendInput(node.VALUE).asUnknown();
+            compiler.source += `try {
+  const _inst = ${instanceExpr};
+  let _holder = null;
+  let _target;
+  if (_inst instanceof vm.runtime.ext_jsoop.JSObject) { _holder = _inst; _target = _inst.value; }
+  else if (_inst && typeof _inst === 'object' && _inst._jsoopLookupMarker && _inst.lookupId) {
+    let _found = vm.runtime.ext_jsoop._getFromLookupTable(_inst.lookupId);
+    if (_found instanceof vm.runtime.ext_jsoop.JSObject) { _holder = _found; _target = _found.value; } else { _target = _found; }
+  } else { _target = _inst; }
+  let _val = ${valueExpr};
+  if (!(_val instanceof vm.runtime.ext_jsoop.JSObject) && !(_val && typeof _val === 'object' && (_val._jsoopLookupMarker || _val.customId))) {
+    try { _val = vm.runtime.ext_jsoop._convertToNativeValue(${valueExpr}); } catch (_) { _val = ${valueExpr}; }
+  }
+  if (_target && (typeof _target === 'object' || typeof _target === 'function')) {
+    _target[${propExpr}] = _val;
+  } else {
+    const _newObj = Object(_target);
+    _newObj[${propExpr}] = _val;
+    if (_holder) _holder.value = _newObj;
+    else if (_inst && typeof _inst === 'object') _inst.value = _newObj;
+  }
+} catch (e) { try { console.error(e); } catch(_) {} }
+`;
+          },
+          setPropJwArray: (node, compiler, imports) => {
+            const propExpr = compiler.descendInput(node.PROP).asString();
+            const instanceExpr = compiler.descendInput(node.INSTANCE).asUnknown();
+            const valueExpr = compiler.descendInput(node.VALUE).asUnknown();
+            compiler.source += `try {
+  const _inst = ${instanceExpr};
+  let _holder = null;
+  let _target;
+  if (_inst instanceof vm.runtime.ext_jsoop.JSObject) { _holder = _inst; _target = _inst.value; }
+  else if (_inst && typeof _inst === 'object' && _inst._jsoopLookupMarker && _inst.lookupId) {
+    let _found = vm.runtime.ext_jsoop._getFromLookupTable(_inst.lookupId);
+    if (_found instanceof vm.runtime.ext_jsoop.JSObject) { _holder = _found; _target = _found.value; } else { _target = _found; }
+  } else { _target = _inst; }
+  let _val = ${valueExpr};
+  console.log(_val);
+  if (!(_val instanceof vm.runtime.ext_jsoop.JSObject) && !(_val && typeof _val === 'object' && (_val._jsoopLookupMarker || _val.customId))) {
+    try { _val = vm.runtime.ext_jsoop._convertToNativeValue(${valueExpr}); } catch (_) { _val = ${valueExpr}; }
+  }
+    
+  if (_target && _target instanceof vm.jwArray.Type) {
+    _target.array[${propExpr}] = _val;
+  } else if (_inst && _inst.customId === 'jwArray' && _inst.array) {
+    _inst.array[${propExpr}] = _val;
+  } else if (_target && (typeof _target === 'object' || typeof _target === 'function')) {
+    _target[${propExpr}] = _val;
+  } else {
+    const _newObj = Object(_target);
+    _newObj[${propExpr}] = _val;
+    if (_holder) _holder.value = _newObj;
+    else if (_inst && typeof _inst === 'object') _inst.value = _newObj;
+  }
+} catch (e) { try { console.error(e); } catch(_) {} }
+`;
+          },
+          setPropDogeiscutObject: (node, compiler, imports) => {
+            const propExpr = compiler.descendInput(node.PROP).asString();
+            const instanceExpr = compiler.descendInput(node.INSTANCE).asUnknown();
+            const valueExpr = compiler.descendInput(node.VALUE).asUnknown();
+            compiler.source += `try {
+  const _inst = ${instanceExpr};
+  let _holder = null;
+  let _target;
+  if (_inst instanceof vm.runtime.ext_jsoop.JSObject) { _holder = _inst; _target = _inst.value; }
+  else if (_inst && typeof _inst === 'object' && _inst._jsoopLookupMarker && _inst.lookupId) {
+    let _found = vm.runtime.ext_jsoop._getFromLookupTable(_inst.lookupId);
+    if (_found instanceof vm.runtime.ext_jsoop.JSObject) { _holder = _found; _target = _found.value; } else { _target = _found; }
+  } else { _target = _inst; }
+  let _val = ${valueExpr};
+  if (!(_val instanceof vm.runtime.ext_jsoop.JSObject) && !(_val && typeof _val === 'object' && (_val._jsoopLookupMarker || _val.customId))) {
+    try { _val = vm.runtime.ext_jsoop._convertToNativeValue(${valueExpr}); } catch (_) { _val = ${valueExpr}; }
+  }
+  if (_target && _target.customId === 'dogeiscutObject' && Array.isArray(_target.map)) {
+    let found = false;
+    for (let i = 0; i < _target.map.length; i++) {
+      if (_target.map[i][0] === ${propExpr}) {
+        _target.map[i][1] = _val;
+        found = true;
+        break;
+      }
+    }
+    if (!found) _target.map.push([${propExpr}, _val]);
+  } else if (_inst && _inst.customId === 'dogeiscutObject' && Array.isArray(_inst.map)) {
+    let found = false;
+    for (let i = 0; i < _inst.map.length; i++) {
+      if (_inst.map[i][0] === ${propExpr}) {
+        _inst.map[i][1] = _val;
+        found = true;
+        break;
+      }
+    }
+    if (!found) _inst.map.push([${propExpr}, _val]);
+  } else if (_target && (typeof _target === 'object' || typeof _target === 'function')) {
+    _target[${propExpr}] = _val;
+  } else {
+    const _newObj = Object(_target);
+    _newObj[${propExpr}] = _val;
+    if (_holder) _holder.value = _newObj;
+    else if (_inst && typeof _inst === 'object') _inst.value = _newObj;
+  }
+} catch (e) { try { console.error(e); } catch(_) {} }
 `;
           },
         },
@@ -4516,7 +4760,7 @@
       });
     }
 
-    new({ CONSTRUCTOR, ARGS }) {
+    async new({ CONSTRUCTOR, ARGS }) {
       if (DEBUG)
         console.dir({
           action: "new(entry)",
@@ -4536,6 +4780,14 @@
         }
         try {
           const instance = Reflect.construct(ctor, args);
+          // If constructor ran a factory that returned an initialization
+          // promise, wait for it to complete so methods and instance state
+          // are ready before returning to caller.
+          try {
+            if (instance && instance._jsoopInitPromise && typeof instance._jsoopInitPromise.then === 'function') {
+              await instance._jsoopInitPromise;
+            }
+          } catch (_) {}
           if (DEBUG)
             console.dir({
               action: "new(result)",
@@ -5349,6 +5601,19 @@
           INSTANCE,
           VALUE,
         });
+
+      // Quick diagnostics to understand the incoming VALUE shape
+      try {
+        const isJwArrayRaw = typeof jwArray !== 'undefined' && jwArray && VALUE instanceof jwArray.Type;
+        const isJSObjectRaw = VALUE instanceof JSObject;
+        const isLookupMarker = VALUE && typeof VALUE === 'object' && (VALUE._jsoopLookupMarker || VALUE.lookupId);
+        const isArrayRaw = Array.isArray(VALUE);
+        const preview = (() => { try { return VALUE && VALUE.toString ? VALUE.toString() : String(VALUE); } catch (e) { return String(VALUE); } })();
+        console.log("[jsoop.debug] setPropJwArray incoming:", { PROP, isArrayRaw, isJwArrayRaw, isJSObjectRaw, isLookupMarker, preview });
+      } catch (e) {
+        try { console.error('[jsoop.debug] setPropJwArray diag failed', e); } catch (_) {}
+      }
+
       const resolved = this._resolveInstanceHolder(INSTANCE);
       const holder = resolved.holder;
       const target = resolved.value;
@@ -5359,6 +5624,7 @@
           : this._convertToNativeValue(VALUE);
 
       try {
+        if (DEBUG) console.dir({ action: "setPropJwArray(converted)", value });
         // If this is a jwArray wrapper (the original object), write to its .array
         if (target && target instanceof jwArray.Type) {
           target.array[PROP] = value;
@@ -5373,11 +5639,12 @@
           if (holder) holder.value = newObj;
           else if (INSTANCE && typeof INSTANCE === "object") INSTANCE.value = newObj;
         }
-        if (DEBUG)
-          console.dir({
-            action: "setPropJwArray(done)",
-            target: holder ? holder.value : target,
-          });
+        console.dir({
+          action: "setPropJwArray(done)",
+          PROP,
+          target: holder ? holder.value : target,
+          assignedValue: value,
+        });
       } catch (err) {
         console.error("JS OOP Error in setPropJwArray:", err);
         if (DEBUG)
